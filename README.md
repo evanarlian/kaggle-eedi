@@ -1,11 +1,19 @@
 # kaggle-eedi
 Eedi - Mining Misconceptions in Mathematics
 
-# usage
-Download files.
+# preparation
+Make virtual env and install deps.
+```bash
+pip install .
+```
+
+Download dataset.
 ```bash
 ./scripts/download_data.sh
 ```
+
+# usage
+See EDA on `eda.ipynb`.
 
 # notes and ideas:
 * entropix
@@ -22,7 +30,12 @@ Download files.
 
 
 # todo
-* complete eda, fill up with extra knowledge:
-    * test already equipped with correct answer, so this competition is only about finding the misconception, no need to answer the question
-* download QWEN,
 * download kaggle docker
+1. Just emb untrained
+2. Paraphrase
+3. Translate
+4. Train emb
+5. Qwen -> bge -> top 25
+6. Bge top 5 -> qwen get top1 (but how do i get all 25?)
+7. Bge top 25 -> qwen entropy on all 25, rerank top 25 (this is kinda hard because we are forcing the llm not to think, using this way)
+8. Entropix
