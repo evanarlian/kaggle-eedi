@@ -39,3 +39,4 @@ See EDA on `eda.ipynb`.
 6. Bge top 5 -> qwen get top1 (but how do i get all 25?)
 7. Bge top 25 -> qwen entropy on all 25, rerank top 25 (this is kinda hard because we are forcing the llm not to think, using this way)
 8. Entropix
+9. ColBert style retrieval?
