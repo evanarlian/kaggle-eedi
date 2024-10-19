@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
+import torch
 from sentence_transformers import SentenceTransformer
+
+from utils import make_valid_df, map_at_k
 
 
 @dataclass
@@ -19,11 +22,21 @@ def main(args: Args):
     df_mis = pd.read_csv(args.dataset_dir / "misconception_mapping.csv")
     df_train = pd.read_csv(args.dataset_dir / "train.csv")
     df_test = pd.read_csv(args.dataset_dir / "test.csv")
-    df = df_test.copy() if args.private else df_train
+    if args.private:
+        df = df_test.copy()
+    else:
+        df = df_train.copy()
+    df_valid = make_valid_df(df)
 
     # embed
     sentences = (
-        df["SubjectName"] + ". " + df["ConstructName"] + ". " + df["QuestionText"]
+        df_valid["SubjectName"]
+        + ". "
+        + df_valid["ConstructName"]
+        + ". "
+        + df_valid["QuestionText"]
+        + ". "
+        + df_valid["AnswerText"]
     ).tolist()
     misconceptions = df_mis["MisconceptionName"].tolist()
     model = SentenceTransformer(args.emb)
@@ -32,28 +45,26 @@ def main(args: Args):
     sent_embs = model.encode(sentences, convert_to_tensor=True)
     mis_embs = model.encode(misconceptions, convert_to_tensor=True)
     print("sent_emb shape:", sent_embs.size())
-    print("mis_emb shape:", sent_embs.size())
+    print("mis_emb shape:", mis_embs.size())
 
     # calculate the embedding similarities
-    similarities = model.similarity(sent_embs, mis_embs)
+    similarities = model.similarity(sent_embs, mis_embs).cpu()
+    print(similarities)
     print(similarities.size())
-    val, idx = similarities.topk(k=25, dim=1)
 
-    # make submission
-    d = {
-        "QuestionId_Answer": [],
-        "MisconceptionId": [],
-    }
-    for (i, row), top25 in zip(df_train.iterrows(), idx.tolist()):
-        correct = row["CorrectAnswer"]
-        for letter in "ABCD":
-            if letter == correct:
-                continue
-            d["QuestionId_Answer"].append(f"{row['QuestionId']}_{letter}")
-            # for now, assign the same top25 regardless of user wrong answer
-            d["MisconceptionId"].append(" ".join(str(m) for m in top25))
-    df_ans = pd.DataFrame.from_dict(d)
-    df_ans.to_csv("submission.csv", index=False)
+    if args.private:
+        # make submission
+        val, idx = similarities.topk(k=25)
+        df_valid["MisconceptionId"] = [
+            " ".join(str(m) for m in top25) for top25 in idx.tolist()
+        ]
+        df_ans = df_valid[["QuestionId_Answer", "MisconceptionId"]]
+        df_ans.to_csv("submission.csv", index=False)
+    else:
+        # evaluate preds on train
+        labels = torch.tensor(df_valid["MisconceptionIdLabel"].tolist())
+        map_at_25 = map_at_k(labels, similarities, k=25)
+        print(f"mAP@25 is {map_at_25}")
 
 
 if __name__ == "__main__":

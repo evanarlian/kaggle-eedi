@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import torch
+from torch import Tensor
 
 
 def merge_with_misconceptions(
@@ -54,15 +56,15 @@ def make_valid_df(df: pd.DataFrame) -> pd.DataFrame:
                 "MisconceptionDId",
             ],
             var_name="_melted_mis_header",
-            value_name="MisconceptionId",
+            value_name="MisconceptionIdLabel",
         )
         df_melted_mis = df_melted_mis.sort_values(["QuestionId", "_melted_mis_header"])
         df_melted_mis = df_melted_mis.drop(columns=["_melted_mis_header"])
         # 3. combine and cleam
         df_melted_mis = df_melted_mis.drop(columns="QuestionId")
         df_valid = pd.concat([df_melted_ans, df_melted_mis], axis=1)
-        df_valid = df_valid[df_valid["MisconceptionId"].notna()]
-        df_valid["MisconceptionId"] = df_valid["MisconceptionId"].astype(int)
+        df_valid = df_valid[df_valid["MisconceptionIdLabel"].notna()]
+        df_valid["MisconceptionIdLabel"] = df_valid["MisconceptionIdLabel"].astype(int)
     except KeyError:
         # test set does not have misconceptions
         df_valid = df_melted_ans
@@ -71,3 +73,22 @@ def make_valid_df(df: pd.DataFrame) -> pd.DataFrame:
         df_valid["QuestionId"].astype(str) + "_" + df_valid["WrongChoice"]
     )
     return df_valid
+
+
+def map_at_k(labels: Tensor, similarities: Tensor, k: int) -> float:
+    """Calculates mAP@k metric.
+
+    Args:
+        labels (Tensor): ground truth tensor, size (n_rows,).
+        similarities (Tensor): similarity score tensor, size (n_rows, n_misconceptions).
+        k (int, optional): k for mAP@k. Defaults to 25.
+
+    Returns:
+        float: mAP@k score
+    """
+    min_k = min(similarities.size(-1), k)
+    val, idx = similarities.topk(min_k)
+    mask = labels[:, None] == idx
+    denominator = torch.arange(min_k) + 1
+    mapk = 1 / denominator[None, :] * mask
+    return mapk.sum(-1).mean().item()
