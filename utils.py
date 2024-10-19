@@ -14,14 +14,14 @@ def merge_with_misconceptions(
     return df_merged
 
 
-def make_valid_train(df_train: pd.DataFrame) -> pd.DataFrame:
-    """Creates a valid train dataframe. Valid means the misconception id must be not null
+def make_valid_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Creates a valid train or test dataframe. Valid means the misconception id must be not null
     and the dataset is melted to ease row-by-row inference. We are need to melt 2 times
     because we want to melt both answer and miconceptions in unison.
     """
     # 1. melt answers
     df_melted_ans = pd.melt(
-        df_train,
+        df,
         id_vars=[  # what column to keep
             "QuestionId",
             "ConstructId",
@@ -41,25 +41,28 @@ def make_valid_train(df_train: pd.DataFrame) -> pd.DataFrame:
         value_name="_melted_ans",  # rename the column that holds melted-column's content
     )
     df_melted_ans = df_melted_ans.sort_values(["QuestionId", "_melted_ans_header"])
-    # 2. melt misconceptions
-    df_melted_mis = pd.melt(
-        df_train,
-        id_vars=["QuestionId"],
-        value_vars=[
-            "MisconceptionAId",
-            "MisconceptionBId",
-            "MisconceptionCId",
-            "MisconceptionDId",
-        ],
-        var_name="_melted_mis_header",
-        value_name="_melted_mis_id",
-    )
-    df_melted_mis = df_melted_mis.sort_values(["QuestionId", "_melted_mis_header"])
-    # 3. combine and cleam
-    df_melted_mis = df_melted_mis.drop(columns="QuestionId")
-    df_valid = pd.concat([df_melted_ans, df_melted_mis], axis=1)
-    df_valid = df_valid[df_valid["_melted_mis_id"].notna()]
-    df_valid["_melted_mis_id"] = df_valid["_melted_mis_id"].astype(int)
+    try:
+        # 2. melt misconceptions
+        df_melted_mis = pd.melt(
+            df,
+            id_vars=["QuestionId"],
+            value_vars=[
+                "MisconceptionAId",
+                "MisconceptionBId",
+                "MisconceptionCId",
+                "MisconceptionDId",
+            ],
+            var_name="_melted_mis_header",
+            value_name="_melted_mis_id",
+        )
+        df_melted_mis = df_melted_mis.sort_values(["QuestionId", "_melted_mis_header"])
+        # 3. combine and cleam
+        df_melted_mis = df_melted_mis.drop(columns="QuestionId")
+        df_valid = pd.concat([df_melted_ans, df_melted_mis], axis=1)
+        df_valid = df_valid[df_valid["_melted_mis_id"].notna()]
+        df_valid["_melted_mis_id"] = df_valid["_melted_mis_id"].astype(int)
+    except KeyError:
+        # test set does not have misconceptions
+        df_valid = df_melted_ans
     df_valid = df_valid.reset_index(drop=True)
     return df_valid
-
