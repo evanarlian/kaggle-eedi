@@ -38,7 +38,7 @@ def make_valid_df(df: pd.DataFrame) -> pd.DataFrame:
             "AnswerDText",
         ],
         var_name="WrongChoice",  # rename the column that holds melted-column's headers
-        value_name="Answer",  # rename the column that holds melted-column's content
+        value_name="AnswerText",  # rename the column that holds melted-column's content
     )
     df_melted_ans["WrongChoice"] = df_melted_ans["WrongChoice"].str[6]
     df_melted_ans = df_melted_ans.sort_values(["QuestionId", "WrongChoice"])
@@ -61,8 +61,8 @@ def make_valid_df(df: pd.DataFrame) -> pd.DataFrame:
         # 3. combine and cleam
         df_melted_mis = df_melted_mis.drop(columns="QuestionId")
         df_valid = pd.concat([df_melted_ans, df_melted_mis], axis=1)
-        df_valid = df_valid[df_valid["_melted_mis_id"].notna()]
-        df_valid["_melted_mis_id"] = df_valid["_melted_mis_id"].astype(int)
+        df_valid = df_valid[df_valid["MisconceptionId"].notna()]
+        df_valid["MisconceptionId"] = df_valid["MisconceptionId"].astype(int)
     except KeyError:
         # test set does not have misconceptions
         df_valid = df_melted_ans
