@@ -7,7 +7,7 @@ import pandas as pd
 import torch
 from sentence_transformers import SentenceTransformer
 
-from utils import make_valid_df, map_at_k
+from utils import make_valid_df, map_at_k, rank_dist
 
 
 @dataclass
@@ -49,8 +49,7 @@ def main(args: Args):
 
     # calculate the embedding similarities
     similarities = model.similarity(sent_embs, mis_embs).cpu()
-    print(similarities)
-    print(similarities.size())
+    print("similarities shape:", similarities.size())
 
     if args.private:
         # make submission
@@ -64,7 +63,11 @@ def main(args: Args):
         # evaluate preds on train
         labels = torch.tensor(df_valid["MisconceptionIdLabel"].tolist())
         map_at_25 = map_at_k(labels, similarities, k=25)
+        rank_distributions = rank_dist(labels, similarities, k=25)
         print(f"mAP@25 is {map_at_25}")
+        print("=============")
+        for rank, count in rank_distributions.items():
+            print(f"rank {rank}: {count} ({count/labels.size(0):.2%})")
 
 
 if __name__ == "__main__":
