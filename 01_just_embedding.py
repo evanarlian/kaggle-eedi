@@ -1,11 +1,10 @@
+import time
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
 from sentence_transformers import SentenceTransformer
-
-from utils import make_valid_train
 
 
 @dataclass
@@ -20,7 +19,6 @@ def main(args: Args):
     df_mis = pd.read_csv(args.dataset_dir / "misconception_mapping.csv")
     df_train = pd.read_csv(args.dataset_dir / "train.csv")
     df_test = pd.read_csv(args.dataset_dir / "test.csv")
-    df_sub = pd.read_csv(args.dataset_dir / "sample_submission.csv")
     df = df_test.copy() if args.private else df_train
 
     # embed
@@ -74,4 +72,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args = Args(dataset_dir=args.dataset_dir, emb=args.emb, private=args.private)
     print(args)
+    t0 = time.perf_counter()
     main(args)
+    elapsed = time.perf_counter() - t0
+    print(f"done in {elapsed:.2f} secs.")
