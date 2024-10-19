@@ -43,9 +43,12 @@ def make_valid_df(df: pd.DataFrame) -> pd.DataFrame:
         value_name="AnswerText",  # rename the column that holds melted-column's content
     )
     df_melted_ans["WrongChoice"] = df_melted_ans["WrongChoice"].str[6]
+    df_melted_ans = df_melted_ans[
+        df_melted_ans["WrongChoice"] != df_melted_ans["CorrectAnswer"]
+    ]
     df_melted_ans = df_melted_ans.sort_values(["QuestionId", "WrongChoice"])
     try:
-        # 2. melt misconceptions
+        # 2. melt misconceptions (only available at train dataset)
         df_melted_mis = pd.melt(
             df,
             id_vars=["QuestionId"],
