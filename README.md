@@ -23,8 +23,12 @@ wait wait wait a minute, if colpali and colqwen so popular, that means they are 
 * real colpali
 * read colqwen
 * my biggest fear is that question-answer pair is soo much different than misconception, so colbert wont work, need finetune afterall
+* make my own colbert class bc this one is super slow prolly, no gpu support as well. Compare the result with reference, handle padding edge cases
+* find math embedding. i think QWEN math if it can be used as vector, itll be good 
 
 Prolly good:
+* QWEN predict batch, find the predictions with misconceptions list with colbert
+* hybrid search
 * QWEN has MATH version, actually 2, just math and math-instruct. Super interesting
 * (DONE) Just emb untrained
 * Train emb
@@ -38,3 +42,11 @@ Prolly good:
 Gimmicky:
 * Translate
 * Paraphrase
+
+Postprocess
+* hungarian matching
+* generalized assignment problem
+* bipartite matching
+* edmonds karp algo
+* ford fulkerson algo
+* python pulp, google or tools
