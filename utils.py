@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 from torch import Tensor
 
 
@@ -121,3 +122,56 @@ def rank_dist(labels: Tensor, similarities: Tensor, k: int) -> dict[int, int]:
         d[rank] += 1
     assert sum(d.values()) == labels.size(0)
     return d
+
+
+def late_interaction(
+    queries: Tensor, docs: Tensor, query_mask: Tensor, doc_mask: Tensor
+) -> Tensor:
+    """Apply batched colbert late interaction with cosine similarity.
+
+    Args:
+        queries (Tensor): Queries, size (nq, n_q_tok, emb_sz)
+        docs (Tensor): Documents, size (nd, n_d_tok, emb_sz)
+        query_mask (Tensor): Query attn mask, size (nq, n_q_tok)
+        doc_mask (Tensor): Document attn mask, size (nd, n_d_tok)
+
+    Returns:
+        Tensor: Late interaction, maxsim applied. Size (nq, nd)
+    """
+    queries = F.normalize(queries, dim=-1)
+    docs = F.normalize(docs, dim=-1)
+    #   (nq, 1, n_q_tok, emb_sz)
+    #   (1, nd, emb_sz, n_d_tok)
+    # = (nq, nd, n_q_tok, n_d_tok)
+    li = queries[:, None] @ docs[None, :].transpose(-1, -2)
+    #   (nq, 1, n_q_tok, 1)
+    #   (1, nd, 1, n_d_tok)
+    # = (nq, nd, n_q_tok, n_d_tok)
+    mask = query_mask[:, None, :, None] * doc_mask[None, :, None, :]
+    # temporarily reduce the padding value to under -1, to make padding impossible to win max operation
+    # -2.0 will work since after L2 norm, max possible value is 1.0
+    li += (mask - 1.0) * 2
+    li = li.max(-1).values
+    # bring back padding to 0.0 just before sum
+    li = (li * mask.max(-1).values).sum(-1)
+    return li
+
+
+def manual_late_interaction(queries: list[Tensor], docs: list[Tensor]) -> Tensor:
+    """Loopy version of colbert late interaction with cosine similarity.
+    Don't use! This version is only for debugging and correctness check.
+
+    Args:
+        queries (list[Tensor]): Queries, each size (n_q_tok, emb_sz)
+        docs (Tensor): Documents, each size (n_d_tok, emb_sz)
+
+    Returns:
+        Tensor: Late interaction, maxsim applied. Size (nq, nd)
+    """
+    li = torch.zeros(len(queries), len(docs))
+    for i, q in enumerate(queries):
+        for j, d in enumerate(docs):
+            q = F.normalize(q, dim=-1)
+            d = F.normalize(d, dim=-1)
+            li[i, j] = (q @ d.T).max(-1).values.sum(-1)
+    return li
