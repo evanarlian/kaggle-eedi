@@ -16,11 +16,15 @@ Download dataset.
 See EDA on `eda.ipynb`.
 
 # todo
+colbert
+* finish implement tiling colbert score (incrementally build colbert score)
+* author suggests that we pad the query token to 32 (with [MASK]) or truncate. padding with [MASK] can force the model to "reweigh" or "rethink" the embedding to better fit retrieval task. See ablation study 4.4 (in colbert paper) for this! Some notable interesting thing is, late interaction computation is ofter not accompanied with attn mask, wow!  I think this is the [MASK] reweighing in action. 
+
 GOD tier idea: LLM2Vec with Qwen math + colbert. Finetunes are for last resprt!
 * https://arxiv.org/pdf/2404.05961
 * https://github.com/McGill-NLP/llm2vec
 wait wait wait a minute, if colpali and colqwen so popular, that means they are llms right? no need for llm2vec?
-* real colpali
+* read colpali
 * read colqwen
 * my biggest fear is that question-answer pair is soo much different than misconception, so colbert wont work, need finetune afterall
 * make my own colbert class bc this one is super slow prolly, no gpu support as well. Compare the result with reference, handle padding edge cases
