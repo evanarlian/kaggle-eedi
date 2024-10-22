@@ -138,18 +138,16 @@ def late_interaction(
     Returns:
         Tensor: Late interaction, maxsim applied. Size (nq, nd)
     """
-    queries = F.normalize(queries, dim=-1)
-    docs = F.normalize(docs, dim=-1)
+    # convert both input tensors and masks to 4d tensor
+    # NOTE in real production scenario, it is better to pre-normalize your docs and
+    # do matmuls with normalized queries for faster result
     #   (nq, 1, n_q_tok, emb_sz)
     #   (1, nd, emb_sz, n_d_tok)
     # = (nq, nd, n_q_tok, n_d_tok)
-    li = queries[:, None] @ docs[None, :].transpose(-1, -2)
-    #   (nq, 1, n_q_tok, 1)
-    #   (1, nd, 1, n_d_tok)
-    # = (nq, nd, n_q_tok, n_d_tok)
+    li = F.cosine_similarity(queries[:, None, :, None], docs[None, :, None, :], dim=-1)
     mask = query_mask[:, None, :, None] * doc_mask[None, :, None, :]
     # temporarily reduce the padding value to under -1, to make padding impossible to win max operation
-    # -2.0 will work since after L2 norm, max possible value is 1.0
+    # -2.0 will work since after L2-norm/cossim, max possible value is 1.0
     li += (mask - 1.0) * 2
     li = li.max(-1).values
     # bring back padding to 0.0 just before sum
