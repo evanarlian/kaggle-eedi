@@ -19,6 +19,7 @@ See EDA on `eda.ipynb`.
 colbert
 * finish implement tiling colbert score (incrementally build colbert score)
 * author suggests that we pad the query token to 32 (with [MASK]) or truncate. padding with [MASK] can force the model to "reweigh" or "rethink" the embedding to better fit retrieval task. See ablation study 4.4 (in colbert paper) for this! Some notable interesting thing is, late interaction computation is ofter not accompanied with attn mask, wow!  I think this is the [MASK] reweighing in action. 
+* try the original colbert model and see the power? this is doable because of my awesome parameterized script
 
 GOD tier idea: LLM2Vec with Qwen math + colbert. Finetunes are for last resprt!
 * https://arxiv.org/pdf/2404.05961
