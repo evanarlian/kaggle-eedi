@@ -84,7 +84,7 @@ def main(args: Args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("device:", device)
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = AutoModel.from_pretrained(args.model).to(device)
+    model = AutoModel.from_pretrained(args.model, trust_remote_code=True).to(device)
 
     # load dataset
     df_mis = pd.read_csv(args.dataset_dir / "misconception_mapping.csv")
