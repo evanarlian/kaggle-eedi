@@ -76,6 +76,9 @@ def make_valid_df(df: pd.DataFrame) -> pd.DataFrame:
     df_valid["QuestionId_Answer"] = (
         df_valid["QuestionId"].astype(str) + "_" + df_valid["WrongChoice"]
     )
+    df_valid["QuestionId"] = df_valid["QuestionId"].astype(int)
+    df_valid["ConstructId"] = df_valid["ConstructId"].astype(int)
+    df_valid["SubjectId"] = df_valid["SubjectId"].astype(int)
     return df_valid
 
 
