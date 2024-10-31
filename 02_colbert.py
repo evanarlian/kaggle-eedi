@@ -11,7 +11,7 @@ from torch import Tensor
 from tqdm.auto import tqdm
 from transformers import AutoModel, AutoTokenizer
 
-from utils import late_interaction, make_valid_df, map_at_k, rank_dist
+from utils import late_interaction, make_nice_df, map_at_k, rank_dist
 
 
 @dataclass
@@ -94,7 +94,7 @@ def main(args: Args):
         df = df_test.copy()
     else:
         df = df_train.copy()
-    df_valid = make_valid_df(df)
+    df_valid = make_nice_df(df)
 
     # embed + late interaction
     sentences = (

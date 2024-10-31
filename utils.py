@@ -17,7 +17,7 @@ def merge_with_misconceptions(
     return df_merged
 
 
-def make_valid_df(df: pd.DataFrame) -> pd.DataFrame:
+def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
     """Creates a valid train or test dataframe. Valid means the misconception id must be not null
     and the dataset is melted to ease row-by-row inference. For train, we are need to melt 2 times
     because we want to melt both answer and miconceptions in unison.

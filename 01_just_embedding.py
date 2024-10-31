@@ -7,7 +7,7 @@ import pandas as pd
 import torch
 from sentence_transformers import SentenceTransformer
 
-from utils import make_valid_df, map_at_k, rank_dist
+from utils import make_nice_df, map_at_k, rank_dist
 
 
 @dataclass
@@ -26,7 +26,7 @@ def main(args: Args):
         df = df_test.copy()
     else:
         df = df_train.copy()
-    df_valid = make_valid_df(df)
+    df_valid = make_nice_df(df)
 
     # embed
     sentences = (
