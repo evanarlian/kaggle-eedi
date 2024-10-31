@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 
-from utils import make_valid_df
+from utils import make_nice_df
 
 
 @dataclass
@@ -40,7 +40,7 @@ def main(args: Args):
     # prepare dataset
     df_mis = pd.read_csv(args.dataset_dir / "misconception_mapping.csv")
     df_full = pd.read_csv(args.dataset_dir / "train.csv")
-    df_full = make_valid_df(df_full)
+    df_full = make_nice_df(df_full)
     df_full = pd.merge(
         left=df_full,
         right=df_mis,
