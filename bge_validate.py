@@ -18,13 +18,11 @@ class Args:
 
 def main(args: Args):
     # load dataset
-    bge_folder = args.dataset_dir / "bge_dataset"
-    df_val = pd.read_csv(
-        bge_folder / "train.csv"
-    )  # TODO there must be something *VERY* wrong about this, even with train file the result is 99% bad
+    df_mis = pd.read_csv(args.dataset_dir / "misconception_mapping.csv")
+    df_val = pd.read_csv(args.dataset_dir / "bge_dataset" / "val.csv")
 
     # NOTE: since the model does not use the answer, these triplet below will form duplicates. No biggie
-    misconceptions = ("MISCONCEPTION: " + df_val["MisconceptionName"]).tolist()
+    misconceptions = ("MISCONCEPTION: " + df_mis["MisconceptionName"]).tolist()
     questions = (
         "QUESTION: "
         + df_val["SubjectName"]
