@@ -12,15 +12,14 @@ from pydantic import BaseModel
 from tqdm.asyncio import tqdm as atqdm
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+semaphore = asyncio.Semaphore(10)
 
 
 @dataclass
 class Args:
     dataset_dir: Path
-
-
-semaphore = asyncio.Semaphore(10)
 
 
 class Paraphrases(BaseModel):
@@ -63,6 +62,7 @@ async def paraphrase(texts: list[str], system_prompt: str, savepath: Path):
         json.dump(d, f)
 
 
+
 async def main(args: Args):
     # load dataset
     df_train = pd.read_csv(args.dataset_dir / "train.csv")
@@ -82,9 +82,19 @@ async def main(args: Args):
     M_PROMPT = "Paraphrase the math misconception below without changing key information. Make 4 (four) paraphrases."
 
     # paraphrase
-    await paraphrase(questions, Q_PROMPT, question_path)
-    await paraphrase(misconceptions, M_PROMPT, misconception_path)
+    if not question_path.exists():
+        logger.info("paraphrasing questions")
+        await paraphrase(questions, Q_PROMPT, question_path)
+    else:
+        logger.info("paraphrased questions exist, skipping")
+    if not misconception_path.exists():
+        logger.info("paraphrasing misconceptions")
+        await paraphrase(misconceptions, M_PROMPT, misconception_path)
+    else:
+        logger.info("paraphrased misconceptions exist, skipping")
 
+    # mix dataset from train
+    # TODO add dataset mixing here too, currently from notebook
 
 if __name__ == "__main__":
     parser = ArgumentParser()

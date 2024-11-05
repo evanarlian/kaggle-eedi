@@ -6,6 +6,7 @@ Make virtual env and install deps.
 ```bash
 pip install .
 ```
+Copy `.env.example` to `.env` and add openai key (only for paraphrase).
 
 Download dataset.
 ```bash
@@ -13,7 +14,11 @@ Download dataset.
 ```
 
 # usage
-See EDA on `eda.ipynb`.
+## paraphrase
+Use openai gpt-4o mini to paraphrase the questions and the miconceptions to increase dataset size. For each question and misconception, create 4 more paraphrase. Costs about $0.36
+```bash
+python paraphrase.py --dataset-dir=data
+```
 
 # todo
 MASTERPLAN:
