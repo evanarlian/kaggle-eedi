@@ -95,6 +95,7 @@ async def main(args: Args):
 
     # mix dataset from train
     # TODO add dataset mixing here too, currently from notebook
+    # TODO upload the dataset to kaggle too (manual, private)
 
 if __name__ == "__main__":
     parser = ArgumentParser()
