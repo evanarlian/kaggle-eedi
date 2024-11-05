@@ -9,8 +9,9 @@ import pandas as pd
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from pydantic import BaseModel
+from tqdm.asyncio import tqdm as atqdm
 
-# load_dotenv()
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 
@@ -29,11 +30,6 @@ class Paraphrases(BaseModel):
 async def paraphrase_single(
     text: str, client: AsyncOpenAI, system_prompt: str, max_retries: int = 5
 ) -> Paraphrases:
-    # import random
-
-    # if random.random() < 0.02:
-    #     raise RuntimeError("fake error")
-    # return Paraphrases(paraphrases=["meme", "lol"])
     async with semaphore:
         for retry in range(max_retries):
             try:
@@ -58,20 +54,13 @@ async def paraphrase_single(
 
 
 async def paraphrase(texts: list[str], system_prompt: str, savepath: Path):
-    # client = AsyncOpenAI()
-    # TODO with semaphore and exponential backoff, there is no need to save to disk first
-    with open(savepath, "r") as f:
-        # {0: [], 1: [], ...}
-        content = json.load(f)
-    missing_indices = [k for k, v in content.items() if v == []]
-    tasks = []
-    for missing in missing_indices:
-        task = paraphrase_single(texts[missing], client, system_prompt)
-        tasks.append(task)
-    result = asyncio.gather(
-        tasks,
+    client = AsyncOpenAI()
+    paraphrased_2d = await atqdm.gather(
+        *[paraphrase_single(text, client, system_prompt) for text in texts]
     )
-    pass
+    d = {i: p.paraphrases for i, p in enumerate(paraphrased_2d)}
+    with open(savepath, "w") as f:
+        json.dump(d, f)
 
 
 async def main(args: Args):
@@ -84,27 +73,17 @@ async def main(args: Args):
     df_mis = df_mis.sort_values("MisconceptionId")
     misconceptions = df_mis["MisconceptionName"].tolist()
 
-    # premade the json
-    # TODO with semaphore and exponential backoff, there is no need to premade
     folder = args.dataset_dir / "paraphrased"
     folder.mkdir(parents=True, exist_ok=True)
     question_path = folder / "question.json"
-    if not question_path.exists():
-        with open(question_path, "w") as f:
-            empty = {i: [] for i in range(len(questions))}
-            json.dump(empty, f)
     misconception_path = folder / "misconception.json"
-    if not misconception_path.exists():
-        with open(misconception_path, "w") as f:
-            empty = {i: [] for i in range(len(misconceptions))}
-            json.dump(empty, f)
 
-    # paraphrase but skip already made paraphrases
     Q_PROMPT = "Paraphrase the question below without changing key information. Do not answer the question. Make 4 (four) paraphrases."
     M_PROMPT = "Paraphrase the math misconception below without changing key information. Make 4 (four) paraphrases."
 
+    # paraphrase
     await paraphrase(questions, Q_PROMPT, question_path)
-    return
+    await paraphrase(misconceptions, M_PROMPT, misconception_path)
 
 
 if __name__ == "__main__":
