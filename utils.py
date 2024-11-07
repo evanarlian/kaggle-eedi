@@ -22,7 +22,11 @@ def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
     and the dataset is melted to ease row-by-row inference. For train, we are need to melt 2 times
     because we want to melt both answer and miconceptions in unison.
     """
-    # 1. melt answers
+    # 1. duplicate correct answer text to its own column
+    df = df.copy()
+    df = df.rename(columns={"CorrectAnswer": "CorrectChoice"})
+    df["CorrectText"] = df.apply(lambda x: x[f"Answer{x['CorrectChoice']}Text"], axis=1)
+    # 2. melt answers
     df_melted_ans = pd.melt(
         df,
         id_vars=[  # what column to keep
@@ -31,7 +35,8 @@ def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
             "ConstructName",
             "SubjectId",
             "SubjectName",
-            "CorrectAnswer",
+            "CorrectChoice",
+            "CorrectText",
             "QuestionText",
         ],
         value_vars=[  # what columns to transform to rows (melted)
@@ -41,15 +46,13 @@ def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
             "AnswerDText",
         ],
         var_name="WrongChoice",  # rename the column that holds melted-column's headers
-        value_name="AnswerText",  # rename the column that holds melted-column's content
+        value_name="WrongText",  # rename the column that holds melted-column's content
     )
     df_melted_ans["WrongChoice"] = df_melted_ans["WrongChoice"].str[6]
-    df_melted_ans = df_melted_ans[
-        df_melted_ans["WrongChoice"] != df_melted_ans["CorrectAnswer"]
-    ]
     df_melted_ans = df_melted_ans.sort_values(["QuestionId", "WrongChoice"])
+    df_melted_ans = df_melted_ans.reset_index(drop=True)
     try:
-        # 2. melt misconceptions (only available at train dataset)
+        # 3. melt misconceptions (only available at train dataset)
         df_melted_mis = pd.melt(
             df,
             id_vars=["QuestionId"],
@@ -63,23 +66,26 @@ def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
             value_name="MisconceptionIdLabel",
         )
         df_melted_mis = df_melted_mis.sort_values(["QuestionId", "_melted_mis_header"])
-        df_melted_mis = df_melted_mis.drop(columns=["_melted_mis_header"])
-        # 3. combine and cleam
-        df_melted_mis = df_melted_mis.drop(columns="QuestionId")
-        df_valid = pd.concat([df_melted_ans, df_melted_mis], axis=1)
-        df_valid = df_valid[df_valid["MisconceptionIdLabel"].notna()]
-        df_valid["MisconceptionIdLabel"] = df_valid["MisconceptionIdLabel"].astype(int)
+        df_melted_mis = df_melted_mis.drop(columns=["QuestionId", "_melted_mis_header"])
+        df_melted_mis = df_melted_mis.reset_index(drop=True)
+        # 4. combine
+        assert len(df_melted_ans) == len(df_melted_mis)
+        df_nice = pd.concat([df_melted_ans, df_melted_mis], axis=1)
     except KeyError:
         # test set does not have misconceptions
-        df_valid = df_melted_ans
-    df_valid = df_valid.reset_index(drop=True)
-    df_valid["QuestionId_Answer"] = (
-        df_valid["QuestionId"].astype(str) + "_" + df_valid["WrongChoice"]
+        df_nice = df_melted_ans
+    # 5. clean
+    df_nice = df_nice[(df_nice["WrongChoice"] != df_nice["CorrectChoice"])]
+    try:
+        df_nice = df_nice[df_nice["MisconceptionIdLabel"].notna()]
+        df_nice["MisconceptionIdLabel"] = df_nice["MisconceptionIdLabel"].astype(int)
+    except KeyError:
+        pass
+    df_nice = df_nice.reset_index(drop=True)
+    df_nice["QuestionId_Answer"] = (
+        df_nice["QuestionId"].astype(str) + "_" + df_nice["WrongChoice"]
     )
-    df_valid["QuestionId"] = df_valid["QuestionId"].astype(int)
-    df_valid["ConstructId"] = df_valid["ConstructId"].astype(int)
-    df_valid["SubjectId"] = df_valid["SubjectId"].astype(int)
-    return df_valid
+    return df_nice
 
 
 def map_at_k(labels: Tensor, similarities: Tensor, k: int) -> float:
