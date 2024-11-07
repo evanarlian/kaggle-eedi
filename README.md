@@ -22,7 +22,7 @@ python paraphrase.py --dataset-dir=data
 
 # todo
 MASTERPLAN:
-1. paraphrase question and misconception. add new column (ai_created). push to kaggle dataset but private.
+1. [DONE] paraphrase question and misconception. add new column (ai_created). push to kaggle dataset but private.
 2. find out about the llm model that does not require trust remote code. Nvidia nvembed v2 is super bad because it need to change the sentence transformer code.
 3. finetune the model based on KDE(?) cup 1st winner code on kaggle. Code is on github i believe.
 4. after rerank, ask qwen math to select the most appropriate misconception
