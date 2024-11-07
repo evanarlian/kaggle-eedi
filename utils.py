@@ -63,7 +63,7 @@ def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
                 "MisconceptionDId",
             ],
             var_name="_melted_mis_header",
-            value_name="MisconceptionIdLabel",
+            value_name="MisconceptionId",
         )
         df_melted_mis = df_melted_mis.sort_values(["QuestionId", "_melted_mis_header"])
         df_melted_mis = df_melted_mis.drop(columns=["QuestionId", "_melted_mis_header"])
@@ -77,8 +77,8 @@ def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
     # 5. clean
     df_nice = df_nice[(df_nice["WrongChoice"] != df_nice["CorrectChoice"])]
     try:
-        df_nice = df_nice[df_nice["MisconceptionIdLabel"].notna()]
-        df_nice["MisconceptionIdLabel"] = df_nice["MisconceptionIdLabel"].astype(int)
+        df_nice = df_nice[df_nice["MisconceptionId"].notna()]
+        df_nice["MisconceptionId"] = df_nice["MisconceptionId"].astype(int)
     except KeyError:
         pass
     df_nice = df_nice.reset_index(drop=True)

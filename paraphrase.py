@@ -11,6 +11,8 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm as atqdm
 
+from utils import make_nice_df
+
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -62,7 +64,6 @@ async def paraphrase(texts: list[str], system_prompt: str, savepath: Path):
         json.dump(d, f)
 
 
-
 async def main(args: Args):
     # load dataset
     df_train = pd.read_csv(args.dataset_dir / "train.csv")
@@ -93,9 +94,39 @@ async def main(args: Args):
     else:
         logger.info("paraphrased misconceptions exist, skipping")
 
-    # mix dataset from train
-    # TODO add dataset mixing here too, currently from notebook
-    # TODO upload the dataset to kaggle too (manual, private)
+    # mix paraphrased with train dataset
+    logger.info("mixing paraphrased with train dataset")
+    with open(args.dataset_dir / "paraphrased/question.json", "r") as f:
+        Q = json.load(f)
+    with open(args.dataset_dir / "paraphrased/misconception.json", "r") as f:
+        M = json.load(f)
+    df_train = make_nice_df(df_train)
+    df_train = pd.merge(df_train, df_mis, on="MisconceptionId")
+    df_train = df_train.rename(columns={"MisconceptionName": "MisconceptionText"})
+
+    def inject_para_questions(x, Q):
+        q_list = [x["QuestionText"]] + Q[str(x["QuestionId"])]
+        ai_created = [False] + [True] * (len(q_list) - 1)
+        x["QuestionText"] = q_list
+        x["QuestionAiCreated"] = ai_created
+        return x
+
+    def inject_para_misconceptions(x, M):
+        m_list = [x["MisconceptionText"]] + M[str(x["MisconceptionId"])]
+        ai_created = [False] + [True] * (len(m_list) - 1)
+        x["MisconceptionText"] = m_list
+        x["MisconceptionAiCreated"] = ai_created
+        return x
+
+    df_train = df_train.apply(lambda x: inject_para_questions(x, Q), axis=1)
+    df_train = df_train.explode(["QuestionText", "QuestionAiCreated"])  # type: ignore
+    df_train = df_train.apply(lambda x: inject_para_misconceptions(x, M), axis=1)
+    df_train = df_train.explode(["MisconceptionText", "MisconceptionAiCreated"])
+
+    # save
+    logger.info(f"saving df_train ({df_train.shape})")
+    df_train.to_csv(args.dataset_dir / "paraphrased/train.csv", index=False)
+
 
 if __name__ == "__main__":
     parser = ArgumentParser()
