@@ -34,11 +34,13 @@ on models to choose:
 * the next llm model to choose is the salesforce SFR, since that is already done by that chinese person. also SFR can work with sentence transformers without much code changes.
 
 locked in:
-* construct hf datset for both training and eval
-* choose loss func, i htink 
-* if i want to use coSENT, then just mine it myself and select random hard negatives everytime. This can conserve dataset size
-* if i want to use multiplenegatives, then i need to consturct the hard negatives myself
+* make evaluator
+
+ideas:
+* start very simple by skipping paraphrased
+* use paraphrased. play with n_negatives retrieved.
+* then start iterative
+* curriculum learning for top k hard, first try 100, 50, 25, etc. Smallest should be 25.
 
 differences
 * sentence transformers' encode is the same as hf's model(**encoded) blabla on [CLS] token.
-* 
