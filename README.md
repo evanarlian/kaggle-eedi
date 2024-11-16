@@ -23,6 +23,22 @@ python paraphrase.py --dataset-dir=data
 # todo
 MASTERPLAN:
 1. [DONE] paraphrase question and misconception. add new column (ai_created). push to kaggle dataset but private.
-2. find out about the llm model that does not require trust remote code. Nvidia nvembed v2 is super bad because it need to change the sentence transformer code.
-3. finetune the model based on KDE(?) cup 1st winner code on kaggle. Code is on github i believe.
+2. [DONE] find out about the llm model that does not require trust remote code. Nvidia nvembed v2 is super bad because it need to change the sentence transformer code.
+3. finetune the model based on KDE(?) cup 1st winner code on kaggle. Ref: https://www.kaggle.com/competitions/eedi-mining-misconceptions-in-mathematics/discussion/543519
 4. after rerank, ask qwen math to select the most appropriate misconception
+
+
+# notes
+on models to choose:
+* i chose simple model first like alibaba gte because it might work lol
+* the next llm model to choose is the salesforce SFR, since that is already done by that chinese person. also SFR can work with sentence transformers without much code changes.
+
+locked in:
+* construct hf datset for both training and eval
+* choose loss func, i htink 
+* if i want to use coSENT, then just mine it myself and select random hard negatives everytime. This can conserve dataset size
+* if i want to use multiplenegatives, then i need to consturct the hard negatives myself
+
+differences
+* sentence transformers' encode is the same as hf's model(**encoded) blabla on [CLS] token.
+* 
