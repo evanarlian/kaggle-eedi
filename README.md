@@ -35,12 +35,13 @@ on models to choose:
 
 locked in:
 * make evaluator
+* extra data by prompting gpt, idk how to make a diverse but not too different dataset
 
 ideas:
 * start very simple by skipping paraphrased
 * use paraphrased. play with n_negatives retrieved.
 * then start iterative
-* curriculum learning for top k hard, first try 100, 50, 25, etc. Smallest should be 25.
+* curriculum learning (needed?) for top k hard, first try 100, 50, 25, etc. Smallest should be 25.
 
 differences
 * sentence transformers' encode is the same as hf's model(**encoded) blabla on [CLS] token.
