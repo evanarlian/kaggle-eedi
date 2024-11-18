@@ -34,7 +34,7 @@ on models to choose:
 * the next llm model to choose is the salesforce SFR, since that is already done by that chinese person. also SFR can work with sentence transformers without much code changes.
 
 locked in:
-* make evaluator
+* FUCKKKKKK, i think combining questions and misconceptions are not a good choice. First, it made the file bloated and we deduplicate it anyways. Then if we precombine it, there will be misconceptions that will never be included in that huge dataset because train dataset does not guarantee to use all miscons. TODO remade the script and reupload to kaggle.
 * extra data by prompting gpt, idk how to make a diverse but not too different dataset
 
 ideas:
