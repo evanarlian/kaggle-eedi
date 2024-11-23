@@ -11,7 +11,7 @@ from torch import Tensor
 from tqdm.auto import tqdm
 from transformers import AutoModel, AutoTokenizer
 
-from utils import late_interaction, make_nice_df, map_at_k, rank_dist
+from tests.utils import late_interaction, make_nice_df, map_at_k, rank_dist
 
 
 @dataclass

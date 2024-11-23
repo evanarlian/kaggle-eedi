@@ -7,7 +7,7 @@ import pandas as pd
 import torch
 from sentence_transformers import SentenceTransformer
 
-from utils import map_at_k, rank_dist
+from tests.utils import map_at_k, rank_dist
 
 
 @dataclass

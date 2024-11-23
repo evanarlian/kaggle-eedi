@@ -1,61 +1,44 @@
 import json
-import random
-import string
-import time
+import os
 from argparse import ArgumentParser
-from collections import defaultdict
 from dataclasses import dataclass
-from itertools import islice
+from html import parser
 from pathlib import Path
+from pprint import pprint
 
-import numpy as np
 import pandas as pd
-import torch
-import torch.nn.functional as F
 from sentence_transformers import (
     SentenceTransformer,
-    SentenceTransformerModelCardData,
     SentenceTransformerTrainer,
     SentenceTransformerTrainingArguments,
 )
-from sentence_transformers.evaluation import (
-    InformationRetrievalEvaluator,
-    TripletEvaluator,
-)
-from sentence_transformers.losses import CoSENTLoss, MultipleNegativesRankingLoss
+from sentence_transformers.evaluation import InformationRetrievalEvaluator
+from sentence_transformers.losses import MultipleNegativesRankingLoss
 from sentence_transformers.training_args import BatchSamplers
-from sentence_transformers.util import cos_sim
 from sklearn.model_selection import GroupShuffleSplit
-from torch import Tensor, nn, optim
-from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
-from transformers import AutoModel, AutoTokenizer
-from usearch.index import Index
 
-from my_datasets import Dataset as HFDataset
-from my_datasets import (
-    hn_mine_st,
-    load_dataset,
-    make_ir_evaluator_dataset,
-    make_mnr_dataset,
-)
+from eedi.my_datasets import hn_mine_st, make_ir_evaluator_dataset, make_mnr_dataset
+from eedi.utils import wib_now
 
 
 @dataclass
 class Args:
-    dataset_path: Path
-    model: Path
-    output_dir: Path
+    paraphrased_path: Path
+    model: str
+    run_name: str
+    per_device_bs: int
+    n_epochs: int
 
 
-def main():
+def main(args: Args):
     # 1. load model
-    model_name = "Alibaba-NLP/gte-large-en-v1.5"
-    model = SentenceTransformer(model_name, trust_remote_code=True)
+    model = SentenceTransformer(args.model, trust_remote_code=True)
+    # TODO peft model,
+    # TODO
 
     # 2. load dataset
     # load paraphrased misconception
-    df_mis = pd.read_csv("data/eedi-paraphrased/misconception_mapping.csv")
+    df_mis = pd.read_csv(args.paraphrased_path / "misconception_mapping.csv")
     orig_mis = (
         df_mis[~df_mis["MisconceptionAiCreated"]]
         .sort_values("MisconceptionId")["MisconceptionText"]
@@ -63,7 +46,7 @@ def main():
     )
     assert len(orig_mis) == 2587
     # load paraphrased train
-    df = pd.read_csv("data/eedi-paraphrased/train.csv")
+    df = pd.read_csv(args.paraphrased_path / "train.csv")
     df["QuestionComplete"] = (
         "Subject: "
         + df["SubjectName"]
@@ -117,7 +100,7 @@ def main():
 
     # make evaluator
     q, mis, mapping = make_ir_evaluator_dataset(df_val, orig_mis)
-    evaluator = InformationRetrievalEvaluator(
+    val_evaluator = InformationRetrievalEvaluator(
         queries=q,
         corpus=mis,
         relevant_docs=mapping,
@@ -129,11 +112,11 @@ def main():
     loss = MultipleNegativesRankingLoss(model)
     training_args = SentenceTransformerTrainingArguments(
         # Required parameter:
-        output_dir="models/gte-large-en-1-outdir",  # TODO what is the difference vs save pretrained?
+        output_dir=f"models/{args.run_name}",
         # Optional training parameters:
-        num_train_epochs=1,
-        per_device_train_batch_size=16,
-        per_device_eval_batch_size=16,
+        num_train_epochs=args.n_epochs,
+        per_device_train_batch_size=args.per_device_bs,
+        per_device_eval_batch_size=args.per_device_bs,
         learning_rate=2e-5,
         warmup_ratio=0.1,
         fp16=True,  # Set to False if you get an error that your GPU can't run on FP16
@@ -141,12 +124,12 @@ def main():
         batch_sampler=BatchSamplers.NO_DUPLICATES,  # MultipleNegativesRankingLoss benefits from no duplicate samples in a batch
         # Optional tracking/debugging parameters:
         eval_strategy="steps",
-        eval_steps=100,
+        eval_steps=500,
         save_strategy="steps",
-        save_steps=100,
-        save_total_limit=2,
-        logging_steps=100,
-        run_name="gte-large-en-1-wandb",  # Will be used in W&B if `wandb` is installed
+        save_steps=500,
+        save_total_limit=5,
+        logging_steps=500,
+        run_name=args.run_name,  # Will be used in W&B if `wandb` is installed
     )
     trainer = SentenceTransformerTrainer(
         model=model,
@@ -154,18 +137,50 @@ def main():
         train_dataset=train_dataset,
         # eval_dataset=eval_dataset, # TODO dont need eval dataset for now, really?
         loss=loss,
-        evaluator=evaluator,
+        evaluator=val_evaluator,
     )
     trainer.train()
 
-    evaluator(model)
-
+    final_val_result = val_evaluator(model)
+    print("=== FINAL VAL RESULT ===")
+    pprint(final_val_result)
     # 8. Save the trained model
-    model.save_pretrained("models/gte-large-en-1-local")
-
-    # 9. (Optional) Push it to the Hugging Face Hub
-    model.push_to_hub("gte-large-en-1-hfpush")
+    model.save_pretrained(f"models/{args.run_name}/last")
+    model.push_to_hub(args.run_name, private=True)
 
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser()
+    parser.add_argument(
+        "--paraphrased-path",
+        type=Path,
+        required=True,
+        help="Path to paraphrased dataset.",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        required=True,
+        help="Pretrained model name from huggingface or local path",
+    )
+    parser.add_argument(
+        "--per-device-bs",
+        type=int,
+        required=True,
+        help="Batch size per gpu for both training and validation",
+    )
+    parser.add_argument(
+        "--n-epochs", type=int, required=True, help="Number of trianing epochs"
+    )
+    parser.add_argument(
+        "--run-name",
+        type=str,
+        required=True,
+        help="<run_name>_<time>. Time will be auto added, used for saving locally, wandb tracking, and upload to hf repo",
+    )
+    args = parser.parse_args()
+    args = Args(**vars(args))
+    os.environ["WANDB_PROJECT"] = "kaggle-eedi"
+    args.run_name = f"{args.run_name}_{wib_now()}"
+    print(args)
+    main(args)

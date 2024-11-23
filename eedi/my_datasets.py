@@ -12,6 +12,77 @@ from tqdm.auto import tqdm
 from usearch.index import Index
 
 
+def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Creates a valid train or test dataframe. Valid means the misconception id must be not null
+    and the dataset is melted to ease row-by-row inference. For train, we are need to melt 2 times
+    because we want to melt both answer and miconceptions in unison.
+    """
+    # 1. duplicate correct answer text to its own column
+    df = df.copy()
+    df = df.rename(columns={"CorrectAnswer": "CorrectChoice"})
+    df["CorrectText"] = df.apply(lambda x: x[f"Answer{x['CorrectChoice']}Text"], axis=1)
+    # 2. melt answers
+    df_melted_ans = pd.melt(
+        df,
+        id_vars=[  # what column to keep
+            "QuestionId",
+            "ConstructId",
+            "ConstructName",
+            "SubjectId",
+            "SubjectName",
+            "CorrectChoice",
+            "CorrectText",
+            "QuestionText",
+        ],
+        value_vars=[  # what columns to transform to rows (melted)
+            "AnswerAText",
+            "AnswerBText",
+            "AnswerCText",
+            "AnswerDText",
+        ],
+        var_name="WrongChoice",  # rename the column that holds melted-column's headers
+        value_name="WrongText",  # rename the column that holds melted-column's content
+    )
+    df_melted_ans["WrongChoice"] = df_melted_ans["WrongChoice"].str[6]
+    df_melted_ans = df_melted_ans.sort_values(["QuestionId", "WrongChoice"])
+    df_melted_ans = df_melted_ans.reset_index(drop=True)
+    try:
+        # 3. melt misconceptions (only available at train dataset)
+        df_melted_mis = pd.melt(
+            df,
+            id_vars=["QuestionId"],
+            value_vars=[
+                "MisconceptionAId",
+                "MisconceptionBId",
+                "MisconceptionCId",
+                "MisconceptionDId",
+            ],
+            var_name="_melted_mis_header",
+            value_name="MisconceptionId",
+        )
+        df_melted_mis = df_melted_mis.sort_values(["QuestionId", "_melted_mis_header"])
+        df_melted_mis = df_melted_mis.drop(columns=["QuestionId", "_melted_mis_header"])
+        df_melted_mis = df_melted_mis.reset_index(drop=True)
+        # 4. combine
+        assert len(df_melted_ans) == len(df_melted_mis)
+        df_nice = pd.concat([df_melted_ans, df_melted_mis], axis=1)
+    except KeyError:
+        # test set does not have misconceptions
+        df_nice = df_melted_ans
+    # 5. clean
+    df_nice = df_nice[(df_nice["WrongChoice"] != df_nice["CorrectChoice"])]
+    try:
+        df_nice = df_nice[df_nice["MisconceptionId"].notna()]
+        df_nice["MisconceptionId"] = df_nice["MisconceptionId"].astype(int)
+    except KeyError:
+        pass
+    df_nice = df_nice.reset_index(drop=True)
+    df_nice["QuestionId_Answer"] = (
+        df_nice["QuestionId"].astype(str) + "_" + df_nice["WrongChoice"]
+    )
+    return df_nice
+
+
 @torch.inference_mode()
 def batched_inference(model, tokenizer, texts: list[str], bs: int, desc: str) -> Tensor:
     """Basically SentenceTransformer.encode, but consume less vram."""
@@ -161,6 +232,7 @@ def make_cosent_dataset(
 def make_ir_evaluator_dataset(
     df_val: pd.DataFrame, orig_mis: list[str]
 ) -> tuple[dict, dict, dict]:
+    """Create dicts required by SentenceTransformer's InformationRetrievalEvaluator."""
     assert len(orig_mis) == 2587
     mapping = (
         df_val[["QuestionId_Answer", "MisconceptionId"]]

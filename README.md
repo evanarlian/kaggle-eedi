@@ -17,7 +17,7 @@ Download dataset.
 ## paraphrase
 Use openai gpt-4o mini to paraphrase the questions and the miconceptions to increase dataset size. For each question and misconception, create 4 more paraphrase. Costs about $0.36
 ```bash
-python paraphrase.py --dataset-dir=data
+python -m eedi.paraphrase.py --dataset-dir=data
 ```
 
 # todo

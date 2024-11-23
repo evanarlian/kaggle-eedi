@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm as atqdm
 
-from utils import make_nice_df
+from eedi.my_datasets import make_nice_df
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
