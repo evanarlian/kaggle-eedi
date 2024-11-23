@@ -4,7 +4,7 @@ Eedi - Mining Misconceptions in Mathematics
 # preparation
 Make virtual env and install deps.
 ```bash
-pip install .
+pip install -e .
 ```
 Copy `.env.example` to `.env` and add openai key (only for paraphrase).
 
@@ -17,7 +17,18 @@ Download dataset.
 ## paraphrase
 Use openai gpt-4o mini to paraphrase the questions and the miconceptions to increase dataset size. For each question and misconception, create 4 more paraphrase. Costs about $0.36
 ```bash
-python -m eedi.paraphrase.py --dataset-dir=data
+python -m eedi.paraphrase --dataset-dir=data
+```
+**Note**: this is only done once, you can download paraphrased data [here](https://www.kaggle.com/datasets/evanarlian/eedi-paraphrased). TODO make public later.
+
+## finetune embedding model
+Finetune embedding model with hard negative mining. First, download paraphrased dataset.
+```bash
+./scripts/download_paraphrased_data.sh
+```
+Edit training script and run it.
+```bash
+./scripts/train.sh
 ```
 
 # todo
