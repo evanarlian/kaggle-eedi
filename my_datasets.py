@@ -1,36 +1,14 @@
-import json
 import random
-import string
-import time
-from argparse import ArgumentParser
 from collections import defaultdict
-from dataclasses import dataclass
-from itertools import islice
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from datasets import Dataset, load_dataset
-from sentence_transformers import (
-    SentenceTransformer,
-    SentenceTransformerModelCardData,
-    SentenceTransformerTrainer,
-    SentenceTransformerTrainingArguments,
-)
-from sentence_transformers.evaluation import (
-    InformationRetrievalEvaluator,
-    TripletEvaluator,
-)
-from sentence_transformers.losses import CoSENTLoss, MultipleNegativesRankingLoss
-from sentence_transformers.training_args import BatchSamplers
-from sentence_transformers.util import cos_sim
-from sklearn.model_selection import GroupShuffleSplit
-from torch import Tensor, nn, optim
-from torch.utils.data import DataLoader
+from datasets import Dataset
+from sentence_transformers import SentenceTransformer
+from torch import Tensor
 from tqdm.auto import tqdm
-from transformers import AutoModel, AutoTokenizer
 from usearch.index import Index
 
 
@@ -98,13 +76,13 @@ def hn_mine_st(
         show_progress_bar=True,
         device="cuda",
     )
-    batch_matches = index.search(q_embeds, count=k)
+    batch_matches = index.search(q_embeds, count=k + 10)  # +10 compensate for same ids
     hards = []
     for i, matches in enumerate(batch_matches):  # type: ignore
         nth_miscons = [m.key for m in matches]
         hard_miscons = [
             nth.item() for nth in nth_miscons if mis_ids[nth] != q_mis_ids[i]
-        ]
+        ][:k]
         hards.append(hard_miscons)
     assert len(hards) == len(q_texts)
     return hards
