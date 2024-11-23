@@ -11,7 +11,9 @@ from torch import Tensor
 from tqdm.auto import tqdm
 from transformers import AutoModel, AutoTokenizer
 
-from tests.utils import late_interaction, make_nice_df, map_at_k, rank_dist
+from eedi.colbert import late_interaction
+from eedi.metrics import map_at_k, rank_dist
+from eedi.my_datasets import make_nice_df
 
 
 @dataclass

@@ -7,7 +7,8 @@ import pandas as pd
 import torch
 from sentence_transformers import SentenceTransformer
 
-from tests.utils import make_nice_df, map_at_k, rank_dist
+from eedi.metrics import map_at_k, rank_dist
+from eedi.my_datasets import make_nice_df
 
 
 @dataclass
