@@ -37,6 +37,7 @@ MASTERPLAN:
 2. [DONE] find out about the llm model that does not require trust remote code. Nvidia nvembed v2 is super bad because it need to change the sentence transformer code.
 3. finetune the model based on KDE(?) cup 1st winner code on kaggle. Ref: https://www.kaggle.com/competitions/eedi-mining-misconceptions-in-mathematics/discussion/543519
 4. after rerank, ask qwen math to select the most appropriate misconception
+5. fix notebooks and stray py files
 
 
 # notes
