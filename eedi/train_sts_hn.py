@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from html import parser
@@ -36,6 +37,8 @@ class Args:
 def get_target_modules(model) -> list[str]:
     if isinstance(model, BertModel):
         return ["query", "key", "value", "dense"]
+    elif re.search(r"Alibaba-NLP.+NewModel", str(type(model))):
+        return ["qkv_proj", "o_proj", "up_gate_proj", "down_proj"]
     raise ValueError(
         f"Model with type {type(model)} is unsupported, please manually inspect and add lora modules."
     )

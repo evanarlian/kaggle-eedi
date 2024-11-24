@@ -37,8 +37,19 @@ MASTERPLAN:
 2. [DONE] find out about the llm model that does not require trust remote code. Nvidia nvembed v2 is super bad because it need to change the sentence transformer code.
 3. finetune the model based on KDE(?) cup 1st winner code on kaggle. Ref: https://www.kaggle.com/competitions/eedi-mining-misconceptions-in-mathematics/discussion/543519
 4. after rerank, ask qwen math to select the most appropriate misconception
-5. fix notebooks and stray py files
+   1. fix notebooks and stray py files
 
+# lingering problems:
+gpu problems
+* check raw hf (non sentence transformer mem usage forward backward), fp16, with lora and not with lora
+* check the effect of not loading the model to gpu (automatically) during the first load
+* MultipleNegativeLoss might influence gpu vram usage
+
+dataset problem:
+* how to change dataset mid training
+* dataset proxy, add custom method to do iterative hn. Called from callback
+* How to do this only from the rank0?
+  
 
 # notes
 on models to choose:
