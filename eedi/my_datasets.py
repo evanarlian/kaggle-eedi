@@ -119,6 +119,7 @@ def hn_mine_st(
         show_progress_bar=True,
         device="cuda",
     )
+    # TODO change to sklearn nearest neigh, benchfirst
     index = Index(ndim=m_embeds.shape[-1], metric="ip")
     index.add(np.arange(m_embeds.shape[0]), m_embeds)
     q_embeds = model.encode(
@@ -223,40 +224,6 @@ class TrainDatasetProxy(HFDataset):
             for k, v in row.items():
                 template[k].append(v)
         return template
-
-
-# def make_mnr_dataset(
-#     q_texts: list[str],
-#     q_mis_ids: list[int],
-#     mis_texts: list[str],
-#     mis_ids: list[int],
-#     hards: list[list[int]],
-#     n_negatives: int,
-# ) -> TrainDatasetProxy:
-#     """Create SentenceTransformer dataset suitable for MultipleNegativesRankingLoss.
-#     The format is (anchor, positive, negative_1, …, negative_n).
-#     Example: https://huggingface.co/datasets/tomaarsen/gooaq-hard-negatives
-#     """
-#     assert len(q_texts) == len(q_mis_ids) == len(hards)
-#     assert len(mis_texts) == len(mis_ids)
-#     assert all(n_negatives <= len(hard) for hard in hards)
-#     # create reverse mapping
-#     mis_id_to_mis_idx = defaultdict(list)
-#     for i, mis_id in enumerate(mis_ids):
-#         mis_id_to_mis_idx[mis_id].append(i)
-#     # make hf dataset
-#     d = {}
-#     d["q"], d["mis"] = [], []
-#     for i in range(1, n_negatives + 1):
-#         d[f"neg_{i}"] = []
-#     for i, (q_text, q_mis_id) in enumerate(zip(q_texts, q_mis_ids)):
-#         rand_pos = random.choice(mis_id_to_mis_idx[q_mis_id])
-#         rand_negs = random.sample(hards[i], k=n_negatives)
-#         d["q"].append(q_text)
-#         d["mis"].append(mis_texts[rand_pos])
-#         for j, rand_neg in enumerate(rand_negs, 1):
-#             d[f"neg_{j}"].append(mis_texts[rand_neg])
-#     return TrainDataset.from_dict(d)  # type: ignore
 
 
 def make_ir_evaluator_dataset(
