@@ -57,8 +57,8 @@ on models to choose:
 * the next llm model to choose is the salesforce SFR, since that is already done by that chinese person. also SFR can work with sentence transformers without much code changes.
 
 locked in:
-* extra data by prompting gpt, idk how to make a diverse but not too different dataset
-
+* check transformers callback and change dataset hards, using manual batched inference
+* 
 ideas:
 * start very simple by skipping paraphrased
 * use paraphrased. play with n_negatives retrieved.
