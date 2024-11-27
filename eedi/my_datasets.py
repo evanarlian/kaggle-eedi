@@ -1,16 +1,11 @@
 import random
 from collections import defaultdict
-from typing import Iterable, Optional
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
-import torch
-import torch.nn.functional as F
 from datasets import Dataset as HFDataset
 from sentence_transformers import SentenceTransformer
-from torch import Tensor
-from torch.utils.data import Dataset
-from tqdm.auto import tqdm
 from usearch.index import Index
 
 
@@ -172,10 +167,10 @@ class TrainDatasetProxy(HFDataset):
         for i, mis_id in enumerate(mis_ids):
             self.mis_id_to_mis_idx[mis_id].append(i)
         # make a fake huggingface dataset, we wont use the content anyway
-        d = {}
-        d["anchor"], d["pos"] = [], []
-        for i in range(1, n_negatives + 1):
-            d[f"neg_{i}"] = []
+        self.colnames = ["anchor", "pos"] + [
+            f"neg_{i}" for i in range(1, n_negatives + 1)
+        ]
+        d = {colname: [] for colname in self.colnames}
         for i, (q_text, q_mis_id) in enumerate(zip(q_texts, q_mis_ids)):
             rand_pos = random.choice(self.mis_id_to_mis_idx[q_mis_id])
             rand_negs = random.sample(hards[i], k=n_negatives)
@@ -194,8 +189,12 @@ class TrainDatasetProxy(HFDataset):
         return len(self.original)
 
     def __getattr__(self, name):
-        # delegate missing attribute name to original hf dataset
+        # delegate getting missing attribute name to original hf dataset
         return getattr(self.original, name)
+
+    def __delattr__(self, name):
+        # delegate deleting missing attribute name to original hf dataset
+        return delattr(self.original, name)
 
     def get_one_item(self, i: int) -> dict:
         rand_pos = random.choice(self.mis_id_to_mis_idx[self.q_mis_ids[i]])
@@ -214,16 +213,12 @@ class TrainDatasetProxy(HFDataset):
             indices = list(range(*key.indices(len(self))))
         else:
             indices = list(key)
-        template = {
-            "anchor": [],
-            "pos": [],
-            **{f"neg_{j}": [] for j in range(1, self.n_negatives + 1)},
-        }
+        d = {colname: [] for colname in self.colnames}
         batch = [self.get_one_item(i) for i in indices]
         for row in batch:
             for k, v in row.items():
-                template[k].append(v)
-        return template
+                d[k].append(v)
+        return d
 
 
 def make_ir_evaluator_dataset(
