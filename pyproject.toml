@@ -15,8 +15,6 @@ dependencies = [
     "accelerate==1.0.1",
     "peft==0.13.2",
     "sentence-transformers==3.2.0",
-    "FlagEmbedding==1.2.11",
-    "faiss-gpu-cu12==1.9.0",
     "scikit-learn==1.5.2",
     "python-dotenv==1.0.1",
     "openai==1.53.0",

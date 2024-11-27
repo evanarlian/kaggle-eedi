@@ -2,11 +2,10 @@ import random
 from collections import defaultdict
 from typing import Iterable
 
-import numpy as np
 import pandas as pd
 from datasets import Dataset as HFDataset
 from sentence_transformers import SentenceTransformer
-from usearch.index import Index
+from sklearn.neighbors import NearestNeighbors
 
 
 def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -97,7 +96,7 @@ def hn_mine_st(
         q_mis_ids (list[int]): Ground truth misconception ids for the questions.
         mis_texts (list[str]): Misconception texts.
         mis_ids (list[int]): Misconception ids.
-        k (int): Top k hard misconception ids per question (at max).
+        k (int): Top k hard misconception ids per question.
         bs (int): Batch size.
 
     Returns:
@@ -114,9 +113,9 @@ def hn_mine_st(
         show_progress_bar=True,
         device="cuda",
     )
-    # TODO change to sklearn nearest neigh, benchfirst
-    index = Index(ndim=m_embeds.shape[-1], metric="ip")
-    index.add(np.arange(m_embeds.shape[0]), m_embeds)
+    # +10 compensate for same ids
+    nn = NearestNeighbors(n_neighbors=k + 10, algorithm="brute", metric="cosine")
+    nn.fit(m_embeds)
     q_embeds = model.encode(
         q_texts,
         batch_size=bs,
@@ -124,14 +123,10 @@ def hn_mine_st(
         show_progress_bar=True,
         device="cuda",
     )
-    batch_matches = index.search(q_embeds, count=k + 10)  # +10 compensate for same ids
+    ranks = nn.kneighbors(q_embeds, return_distance=False)
     hards = []
-    for i, matches in enumerate(batch_matches):  # type: ignore
-        nth_miscons = [m.key for m in matches]
-        hard_miscons = [
-            nth.item() for nth in nth_miscons if mis_ids[nth] != q_mis_ids[i]
-        ][:k]
-        hards.append(hard_miscons)
+    for i, top_n_miscons in enumerate(ranks):
+        hards.append(top_n_miscons[top_n_miscons != q_mis_ids[i]][:k].tolist())
     assert len(hards) == len(q_texts)
     return hards
 

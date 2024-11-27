@@ -93,11 +93,12 @@ def main(args: Args):
     # split to train (w/ miscons) and val (w/o miscons)
     gss = GroupShuffleSplit(n_splits=1, train_size=0.7, random_state=42)
     train_idx, val_idx = next(gss.split(df, groups=df["QuestionId"]))
-    df_train = df.iloc[train_idx].reset_index(drop=True).head(100)  # TODO HACK subset!!
+    df_train = df.iloc[train_idx].reset_index(drop=True)
     df_val = df.iloc[val_idx]
     df_val = df_val[~df_val["QuestionAiCreated"]].reset_index(drop=True)
 
     # mine hard negatives (TODO this must be changed later to iterative, HOW??)
+    # TODO caching is not correct, this is just for fast dev iteration
     cache = Path("hards.json")
     if cache.exists():
         print("loading from cache")
@@ -127,7 +128,6 @@ def main(args: Args):
         hards=hards_st,
         n_negatives=10,  # TODO check what is the best
     )
-
 
     # make evaluator
     q, mis, mapping = make_ir_evaluator_dataset(df_val, orig_mis)
