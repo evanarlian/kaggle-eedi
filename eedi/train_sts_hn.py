@@ -20,7 +20,7 @@ from sentence_transformers.training_args import BatchSamplers
 from sklearn.model_selection import GroupShuffleSplit
 from transformers import BertModel
 
-from eedi.my_datasets import hn_mine_st, make_ir_evaluator_dataset, make_mnr_dataset
+from eedi.my_datasets import TrainDatasetProxy, hn_mine_st, make_ir_evaluator_dataset
 from eedi.utils import wib_now
 
 
@@ -93,7 +93,7 @@ def main(args: Args):
     # split to train (w/ miscons) and val (w/o miscons)
     gss = GroupShuffleSplit(n_splits=1, train_size=0.7, random_state=42)
     train_idx, val_idx = next(gss.split(df, groups=df["QuestionId"]))
-    df_train = df.iloc[train_idx].reset_index(drop=True)
+    df_train = df.iloc[train_idx].reset_index(drop=True).head(100)  # TODO HACK subset!!
     df_val = df.iloc[val_idx]
     df_val = df_val[~df_val["QuestionAiCreated"]].reset_index(drop=True)
 
@@ -118,15 +118,16 @@ def main(args: Args):
             json.dump(hards_st, f)
 
     # TODO numerize all
-    # make hf dataset suitable for sentence transformers
-    train_dataset = make_mnr_dataset(
+    # make hf dataset suitable for sentence transformers and iterative hard negative mining
+    train_dataset = TrainDatasetProxy(
         q_texts=df_train["QuestionComplete"].tolist(),
         q_mis_ids=df_train["MisconceptionId"].tolist(),
         mis_texts=df_mis["MisconceptionText"].tolist(),
         mis_ids=df_mis["MisconceptionId"].tolist(),
         hards=hards_st,
-        n_negatives=10,  # TODO parametrize ?
+        n_negatives=10,  # TODO check what is the best
     )
+
 
     # make evaluator
     q, mis, mapping = make_ir_evaluator_dataset(df_val, orig_mis)

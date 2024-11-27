@@ -1,13 +1,15 @@
 import random
 from collections import defaultdict
+from typing import Iterable, Optional
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from datasets import Dataset
+from datasets import Dataset as HFDataset
 from sentence_transformers import SentenceTransformer
 from torch import Tensor
+from torch.utils.data import Dataset
 from tqdm.auto import tqdm
 from usearch.index import Index
 
@@ -83,27 +85,6 @@ def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
     return df_nice
 
 
-@torch.inference_mode()
-def batched_inference(model, tokenizer, texts: list[str], bs: int, desc: str) -> Tensor:
-    """Basically SentenceTransformer.encode, but consume less vram."""
-    embeddings = []
-    for i in tqdm(range(0, len(texts), bs), desc=desc):
-        # max_length=256 comes from plotting the complete question text, and 256 covers 99%
-        encoded = tokenizer(
-            texts[i : i + bs],
-            max_length=256,
-            padding=True,
-            truncation=True,
-            return_tensors="pt",
-        ).to("cuda")
-        outputs = model(**encoded)
-        emb = outputs.last_hidden_state[:, 0]  # cls token
-        emb = F.normalize(emb, p=2, dim=-1)
-        embeddings.append(emb.cpu())
-    embeddings = torch.cat(embeddings)
-    return embeddings
-
-
 def hn_mine_st(
     model: SentenceTransformer,
     q_texts: list[str],
@@ -159,74 +140,123 @@ def hn_mine_st(
     return hards
 
 
-def make_mnr_dataset(
-    q_texts: list[str],
-    q_mis_ids: list[int],
-    mis_texts: list[str],
-    mis_ids: list[int],
-    hards: list[list[int]],
-    n_negatives: int,
-) -> Dataset:
-    """Create SentenceTransformer dataset suitable for MultipleNegativesRankingLoss.
-    The format is (anchor, positive, negative_1, …, negative_n).
-    Example: https://huggingface.co/datasets/tomaarsen/gooaq-hard-negatives
-    """
-    assert len(q_texts) == len(q_mis_ids) == len(hards)
-    assert len(mis_texts) == len(mis_ids)
-    assert all(n_negatives <= len(hard) for hard in hards)
-    # create reverse mapping
-    mis_id_to_mis_idx = defaultdict(list)
-    for i, mis_id in enumerate(mis_ids):
-        mis_id_to_mis_idx[mis_id].append(i)
-    # make hf dataset
-    d = {}
-    d["q"], d["mis"] = [], []
-    for i in range(1, n_negatives + 1):
-        d[f"neg_{i}"] = []
-    for i, (q_text, q_mis_id) in enumerate(zip(q_texts, q_mis_ids)):
-        rand_pos = random.choice(mis_id_to_mis_idx[q_mis_id])
-        rand_negs = random.sample(hards[i], k=n_negatives)
-        d["q"].append(q_text)
-        d["mis"].append(mis_texts[rand_pos])
-        for j, rand_neg in enumerate(rand_negs, 1):
-            d[f"neg_{j}"].append(mis_texts[rand_neg])
-    return Dataset.from_dict(d)
+class TrainDatasetProxy(HFDataset):
+    def __init__(
+        self,
+        q_texts: list[str],
+        q_mis_ids: list[int],
+        mis_texts: list[str],
+        mis_ids: list[int],
+        hards: list[list[int]],
+        n_negatives: int,
+    ) -> None:
+        """Create SentenceTransformer dataset suitable for MultipleNegativesRankingLoss.
+        The format is (anchor, positive, negative_1, …, negative_n).
+        Example: https://huggingface.co/datasets/tomaarsen/gooaq-hard-negatives
+
+        This custom class will override the default huggingface dataset behavior to allow
+        random sampling over the positives and hard negatives.
+        """
+        assert len(q_texts) == len(q_mis_ids) == len(hards)
+        assert len(mis_texts) == len(mis_ids)
+        assert all(n_negatives <= len(hard) for hard in hards)
+        self.q_texts = q_texts
+        self.q_mis_ids = q_mis_ids
+        self.mis_texts = mis_texts
+        self.mis_ids = mis_ids
+        self.hards = hards
+        self.n_negatives = n_negatives
+        # create reverse mapping
+        self.mis_id_to_mis_idx = defaultdict(list)
+        for i, mis_id in enumerate(mis_ids):
+            self.mis_id_to_mis_idx[mis_id].append(i)
+        # make a fake huggingface dataset, we wont use the content anyway
+        d = {}
+        d["anchor"], d["pos"] = [], []
+        for i in range(1, n_negatives + 1):
+            d[f"neg_{i}"] = []
+        for i, (q_text, q_mis_id) in enumerate(zip(q_texts, q_mis_ids)):
+            rand_pos = random.choice(self.mis_id_to_mis_idx[q_mis_id])
+            rand_negs = random.sample(hards[i], k=n_negatives)
+            d["anchor"].append(q_text)
+            d["pos"].append(mis_texts[rand_pos])
+            for j, rand_neg in enumerate(rand_negs, 1):
+                d[f"neg_{j}"].append(mis_texts[rand_neg])
+        self.original = HFDataset.from_dict(d)
+
+    def replace_hards(self, new_hards: list[list[int]]) -> None:
+        """Setter to allow hard negative replacement for iterative hard negative mining."""
+        assert all(self.n_negatives <= len(hard) for hard in new_hards)
+        self.hards = new_hards
+
+    def __len__(self) -> int:
+        return len(self.original)
+
+    def __getattr__(self, name):
+        # delegate missing attribute name to original hf dataset
+        return getattr(self.original, name)
+
+    def get_one_item(self, i: int) -> dict:
+        rand_pos = random.choice(self.mis_id_to_mis_idx[self.q_mis_ids[i]])
+        rand_negs = random.sample(self.hards[i], k=self.n_negatives)
+        return {
+            "anchor": self.q_texts[i],
+            "pos": self.mis_texts[rand_pos],
+            **{f"neg_{j}": self.mis_texts[x] for j, x in enumerate(rand_negs, 1)},
+        }
+
+    def __getitem__(self, key: int | slice | Iterable[int]) -> dict:  # type: ignore
+        # custom behavior for item access
+        if isinstance(key, int):
+            return self.get_one_item(key)
+        if isinstance(key, slice):
+            indices = list(range(*key.indices(len(self))))
+        else:
+            indices = list(key)
+        template = {
+            "anchor": [],
+            "pos": [],
+            **{f"neg_{j}": [] for j in range(1, self.n_negatives + 1)},
+        }
+        batch = [self.get_one_item(i) for i in indices]
+        for row in batch:
+            for k, v in row.items():
+                template[k].append(v)
+        return template
 
 
-def make_cosent_dataset(
-    q_texts: list[str],
-    q_mis_ids: list[int],
-    mis_texts: list[str],
-    mis_ids: list[int],
-    hards: list[list[int]],
-    n_negatives: int,
-) -> Dataset:
-    """Create SentenceTransformer dataset suitable for CoSENTLoss.
-    The format is (sentence_A, sentence_B).
-    Example: https://sbert.net/docs/sentence_transformer/training_overview.html#loss-function
-    """
-    assert len(q_texts) == len(q_mis_ids) == len(hards)
-    assert len(mis_texts) == len(mis_ids)
-    assert all(n_negatives <= len(hard) for hard in hards)
-    # create reverse mapping
-    mis_id_to_mis_idx = defaultdict(list)
-    for i, mis_id in enumerate(mis_ids):
-        mis_id_to_mis_idx[mis_id].append(i)
-    # make hf dataset
-    d = {"q": [], "mis": [], "label": []}
-    for i, (q_text, q_mis_id) in enumerate(zip(q_texts, q_mis_ids)):
-        # insert positive
-        rand_pos = random.choice(mis_id_to_mis_idx[q_mis_id])
-        d["q"].append(q_text)
-        d["mis"].append(mis_texts[rand_pos])
-        d["label"].append(1.0)
-        # insert negatives
-        rand_negs = random.sample(hards[i], k=n_negatives)
-        for j, rand_neg in enumerate(rand_negs, 1):
-            d["q"].append(q_text)
-            d["mis"].append(mis_texts[rand_neg])
-            d["label"].append(-1.0)
-    return Dataset.from_dict(d)
+# def make_mnr_dataset(
+#     q_texts: list[str],
+#     q_mis_ids: list[int],
+#     mis_texts: list[str],
+#     mis_ids: list[int],
+#     hards: list[list[int]],
+#     n_negatives: int,
+# ) -> TrainDatasetProxy:
+#     """Create SentenceTransformer dataset suitable for MultipleNegativesRankingLoss.
+#     The format is (anchor, positive, negative_1, …, negative_n).
+#     Example: https://huggingface.co/datasets/tomaarsen/gooaq-hard-negatives
+#     """
+#     assert len(q_texts) == len(q_mis_ids) == len(hards)
+#     assert len(mis_texts) == len(mis_ids)
+#     assert all(n_negatives <= len(hard) for hard in hards)
+#     # create reverse mapping
+#     mis_id_to_mis_idx = defaultdict(list)
+#     for i, mis_id in enumerate(mis_ids):
+#         mis_id_to_mis_idx[mis_id].append(i)
+#     # make hf dataset
+#     d = {}
+#     d["q"], d["mis"] = [], []
+#     for i in range(1, n_negatives + 1):
+#         d[f"neg_{i}"] = []
+#     for i, (q_text, q_mis_id) in enumerate(zip(q_texts, q_mis_ids)):
+#         rand_pos = random.choice(mis_id_to_mis_idx[q_mis_id])
+#         rand_negs = random.sample(hards[i], k=n_negatives)
+#         d["q"].append(q_text)
+#         d["mis"].append(mis_texts[rand_pos])
+#         for j, rand_neg in enumerate(rand_negs, 1):
+#             d[f"neg_{j}"].append(mis_texts[rand_neg])
+#     return TrainDataset.from_dict(d)  # type: ignore
 
 
 def make_ir_evaluator_dataset(
