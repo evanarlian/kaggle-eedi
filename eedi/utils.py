@@ -10,3 +10,6 @@ def wib_now() -> str:
     wib = pytz.timezone("Asia/Jakarta")
     timestamp = datetime.now(wib).strftime("%Y-%m-%d__%H.%M.%S")
     return timestamp
+
+
+# TODO add telegram bot notification?

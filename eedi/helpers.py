@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 from tqdm.auto import tqdm
+from transformers import PreTrainedModel, PreTrainedTokenizer
 
 
 def last_token_pool(last_hidden_states: Tensor, attention_mask: Tensor) -> Tensor:
@@ -21,12 +22,12 @@ def last_token_pool(last_hidden_states: Tensor, attention_mask: Tensor) -> Tenso
 
 @torch.inference_mode()
 def batched_inference(
-    model,
-    tokenizer,
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizer,
     texts: list[str],
     bs: int,
     token_pool: Literal["first", "last"],
-    device,  # TODO what is the accelerator device name?
+    device: torch.device,
     desc: str,
 ) -> Tensor:
     """Basically SentenceTransformer.encode, but consume less vram."""
@@ -47,7 +48,8 @@ def batched_inference(
             emb = outputs["last_hidden_state"][:, 0]  # cls token
         elif token_pool == "last":
             emb = last_token_pool(
-                outputs["last_hidden_state"], encoded["attention_mask"]
+                outputs["last_hidden_state"],
+                encoded["attention_mask"],  # type: ignore
             )
         emb = F.normalize(emb, p=2, dim=-1)
         embeddings.append(emb.cpu())

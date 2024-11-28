@@ -1,11 +1,14 @@
 import random
 from collections import defaultdict
-from typing import Iterable
+from typing import Iterable, Literal
 
 import pandas as pd
 from datasets import Dataset as HFDataset
 from sentence_transformers import SentenceTransformer
 from sklearn.neighbors import NearestNeighbors
+from transformers import PreTrainedModel, PreTrainedTokenizer
+
+from eedi.helpers import batched_inference
 
 
 def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -79,7 +82,7 @@ def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
     return df_nice
 
 
-def hn_mine_st(
+def hn_mine_sbert(
     model: SentenceTransformer,
     q_texts: list[str],
     q_mis_ids: list[int],
@@ -92,6 +95,7 @@ def hn_mine_st(
     Sentence Transformers' version assumes different rows are always negatives, but that is not the case if we use paraphrased data.
 
     Args:
+        model (SentenceTransformer): Sentence transformer model.
         q_texts (list[str]): Question texts.
         q_mis_ids (list[int]): Ground truth misconception ids for the questions.
         mis_texts (list[str]): Misconception texts.
@@ -123,6 +127,68 @@ def hn_mine_st(
         show_progress_bar=True,
         device="cuda",
     )
+    ranks = nn.kneighbors(q_embeds, return_distance=False)
+    hards = []
+    for i, top_n_miscons in enumerate(ranks):
+        hards.append(top_n_miscons[top_n_miscons != q_mis_ids[i]][:k].tolist())
+    assert len(hards) == len(q_texts)
+    return hards
+
+
+# TODO unused again lol
+def hn_mine_hf(
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizer,
+    q_texts: list[str],
+    q_mis_ids: list[int],
+    mis_texts: list[str],
+    mis_ids: list[int],
+    k: int,
+    bs: int,
+    token_pool: Literal["first", "last"],
+    device,
+) -> list[list[int]]:
+    """Hard negative mining, but different from: https://www.sbert.net/docs/package_reference/util.html#sentence_transformers.util.mine_hard_negatives.
+    Sentence Transformers' version assumes different rows are always negatives, but that is not the case if we use paraphrased data.
+
+    Args:
+        model (PreTrainedModel): Huggingface model.
+        tokenizer (PreTrainedTokenizer): Huggingface tokenizer.
+        q_texts (list[str]): Question texts.
+        q_mis_ids (list[int]): Ground truth misconception ids for the questions.
+        mis_texts (list[str]): Misconception texts.
+        mis_ids (list[int]): Misconception ids.
+        k (int): Top k hard misconception ids per question.
+        bs (int): Batch size.
+
+    Returns:
+        list[list[int]]:
+            Hard misconceptions for each question.
+            This is NOT misconception ids, but the actual list index.
+    """
+    assert len(q_texts) == len(q_mis_ids)
+    assert len(mis_texts) == len(mis_ids)
+    m_embeds = batched_inference(
+        model,
+        tokenizer,
+        mis_texts,
+        bs=bs,
+        token_pool=token_pool,
+        device=device,
+        desc="Misconceptions",
+    ).numpy()
+    # +10 compensate for same ids
+    nn = NearestNeighbors(n_neighbors=k + 10, algorithm="brute", metric="cosine")
+    nn.fit(m_embeds)
+    q_embeds = batched_inference(
+        model,
+        tokenizer,
+        q_texts,
+        bs=bs,
+        token_pool=token_pool,
+        device=device,
+        desc="Questions",
+    ).numpy()
     ranks = nn.kneighbors(q_embeds, return_distance=False)
     hards = []
     for i, top_n_miscons in enumerate(ranks):
@@ -177,6 +243,7 @@ class TrainDatasetProxy(HFDataset):
 
     def replace_hards(self, new_hards: list[list[int]]) -> None:
         """Setter to allow hard negative replacement for iterative hard negative mining."""
+        assert len(self.q_texts) == len(self.q_mis_ids) == len(new_hards)
         assert all(self.n_negatives <= len(hard) for hard in new_hards)
         self.hards = new_hards
 

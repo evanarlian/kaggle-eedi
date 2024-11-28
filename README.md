@@ -58,7 +58,8 @@ on models to choose:
 
 locked in:
 * check transformers callback and change dataset hards, using manual batched inference
-* 
+
+
 ideas:
 * start very simple by skipping paraphrased
 * use paraphrased. play with n_negatives retrieved.

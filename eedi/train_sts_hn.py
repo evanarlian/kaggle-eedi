@@ -20,7 +20,8 @@ from sentence_transformers.training_args import BatchSamplers
 from sklearn.model_selection import GroupShuffleSplit
 from transformers import BertModel
 
-from eedi.my_datasets import TrainDatasetProxy, hn_mine_st, make_ir_evaluator_dataset
+from eedi.callbacks import IterativeHNMiningCallback
+from eedi.my_datasets import TrainDatasetProxy, hn_mine_sbert, make_ir_evaluator_dataset
 from eedi.utils import wib_now
 
 
@@ -106,7 +107,7 @@ def main(args: Args):
             hards_st = json.load(f)
     else:
         print("no cache, precomputing")
-        hards_st = hn_mine_st(
+        hards_st = hn_mine_sbert(
             model,
             q_texts=df_train["QuestionComplete"].tolist(),
             q_mis_ids=df_train["MisconceptionId"].tolist(),
@@ -162,6 +163,7 @@ def main(args: Args):
         logging_steps=500,
         run_name=args.run_name,  # Will be used in W&B if `wandb` is installed
     )
+    ihnm_callback = IterativeHNMiningCallback(4, 100)  # TODO 4 and 100 comes from the orignal hn mine call
     trainer = SentenceTransformerTrainer(
         model=model,
         args=training_args,
@@ -169,6 +171,7 @@ def main(args: Args):
         # eval_dataset=eval_dataset, # TODO dont need eval dataset for now, really?
         loss=loss,
         evaluator=val_evaluator,
+        callbacks=[ihnm_callback],
     )
     trainer.train()
 
@@ -178,7 +181,7 @@ def main(args: Args):
     # 8. Save the trained model
     # TODO test loading the lora model from sentence transformers
     model.save_pretrained(f"models/{args.run_name}/last")
-    model.push_to_hub(args.run_name, private=True)
+    # model.push_to_hub(args.run_name, private=True)
 
 
 if __name__ == "__main__":
