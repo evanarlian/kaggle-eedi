@@ -53,9 +53,8 @@ def get_target_modules(model) -> list[str]:
 
 
 def main(args: Args):
-    device = f"cuda:{local_rank()}"
-    print(device)
-    # torch.cuda.set_device(local_rank())
+    print("LOCAL_RANK", local_rank())
+    torch.cuda.set_device(local_rank())  # prevent default cuda:0 in every .cuda() call
     # TODO how to load lora once in multi gpu trianing?
     # TODO how to do EVERYTHING in multi gpu training to avoid duplicate work?
     # 1. load model along with lora
@@ -108,7 +107,7 @@ def main(args: Args):
         mis_ids=df_mis["MisconceptionId"].tolist(),
         k=100,
         bs=4,
-        tqdm=True,
+        tqdm=local_rank() == 0,
     )
 
     # TODO numerize all
