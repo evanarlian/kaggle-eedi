@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from html import parser
 from pathlib import Path
 from pprint import pprint
+from typing import Optional
 
 import pandas as pd
 from peft import LoraConfig, TaskType, get_peft_model  # type: ignore
@@ -21,7 +22,12 @@ from sklearn.model_selection import GroupShuffleSplit
 from transformers import BertModel
 
 from eedi.callbacks import IterativeHNMiningCallback
-from eedi.my_datasets import TrainDatasetProxy, hn_mine_sbert, make_ir_evaluator_dataset
+from eedi.my_datasets import (
+    TrainDatasetProxy,
+    hn_mine_sbert,
+    make_complete_query,
+    make_ir_evaluator_dataset,
+)
 from eedi.utils import wib_now
 
 
@@ -30,8 +36,9 @@ class Args:
     paraphrased_path: Path
     model: str
     per_device_bs: int
+    lr: float
     n_epochs: int
-    lora_rank: int
+    lora_rank: Optional[int]
     run_name: str
 
 
@@ -51,22 +58,25 @@ def main(args: Args):
     # 1. load model along with lora
     # good lora blog: https://magazine.sebastianraschka.com/p/practical-tips-for-finetuning-llms
     model = SentenceTransformer(args.model, trust_remote_code=True)
-    # in sentence transformers, model[0]._modules["auto_model"] is the location of original model
-    lora_modules = get_target_modules(model[0]._modules["auto_model"])
-    peft_config = LoraConfig(
-        task_type=TaskType.FEATURE_EXTRACTION,
-        target_modules=lora_modules,
-        inference_mode=False,
-        r=args.lora_rank,
-        lora_alpha=args.lora_rank * 2,  # just set to 2 * alpha as a rule of thumb
-        lora_dropout=0.2,
-    )
-    model[0]._modules["auto_model"] = get_peft_model(
-        model[0]._modules["auto_model"],  # type: ignore
-        peft_config,
-    )
-    model[0]._modules["auto_model"].print_trainable_parameters()
-
+    if args.lora_rank is not None:
+        print("using lora")
+        # in sentence transformers, model[0]._modules["auto_model"] is the location of original model
+        lora_modules = get_target_modules(model[0]._modules["auto_model"])
+        peft_config = LoraConfig(
+            task_type=TaskType.FEATURE_EXTRACTION,
+            target_modules=lora_modules,
+            inference_mode=False,
+            r=args.lora_rank,
+            lora_alpha=args.lora_rank * 2,  # just set to 2 * alpha as a rule of thumb
+            lora_dropout=0.2,
+        )
+        model[0]._modules["auto_model"] = get_peft_model(
+            model[0]._modules["auto_model"],  # type: ignore
+            peft_config,
+        )
+        model[0]._modules["auto_model"].print_trainable_parameters()
+    else:
+        print("not using lora")
     # 2. load dataset
     # load paraphrased misconception
     df_mis = pd.read_csv(args.paraphrased_path / "misconception_mapping.csv")
@@ -78,19 +88,7 @@ def main(args: Args):
     assert len(orig_mis) == 2587
     # load paraphrased train
     df = pd.read_csv(args.paraphrased_path / "train.csv")
-    df["QuestionComplete"] = (
-        "Subject: "
-        + df["SubjectName"]
-        + ". Construct: "
-        + df["ConstructName"]
-        + ". Question: "
-        + df["QuestionText"]
-        + ". Correct answer: "
-        + df["CorrectText"]
-        + ". Wrong answer: "
-        + df["WrongText"]
-        + "."
-    )
+    df["QuestionComplete"] = df.apply(make_complete_query, axis=1)
     # split to train (w/ miscons) and val (w/o miscons)
     gss = GroupShuffleSplit(n_splits=1, train_size=0.7, random_state=42)
     train_idx, val_idx = next(gss.split(df, groups=df["QuestionId"]))
@@ -115,6 +113,7 @@ def main(args: Args):
             mis_ids=df_mis["MisconceptionId"].tolist(),
             k=100,
             bs=4,
+            tqdm=True,
         )
         with open(cache, "w") as f:
             json.dump(hards_st, f)
@@ -149,11 +148,13 @@ def main(args: Args):
         num_train_epochs=args.n_epochs,
         per_device_train_batch_size=args.per_device_bs,
         per_device_eval_batch_size=args.per_device_bs,
-        learning_rate=2e-5,
+        learning_rate=args.lr,
         warmup_ratio=0.1,
         fp16=True,  # Set to False if you get an error that your GPU can't run on FP16
         bf16=False,  # Set to True if you have a GPU that supports BF16
-        batch_sampler=BatchSamplers.NO_DUPLICATES,  # MultipleNegativesRankingLoss benefits from no duplicate samples in a batch
+        batch_sampler=BatchSamplers.NO_DUPLICATES,  # MultipleNegativesRankingLoss benefits from no duplicate samples in a batch TODO check is this is the slow and memory hog culprit
+        dataloader_drop_last=True,
+        dataloader_num_workers=1,  # we are only getting text so it will be fast
         # Optional tracking/debugging parameters:
         eval_strategy="steps",
         eval_steps=500,
@@ -163,7 +164,9 @@ def main(args: Args):
         logging_steps=500,
         run_name=args.run_name,  # Will be used in W&B if `wandb` is installed
     )
-    ihnm_callback = IterativeHNMiningCallback(4, 100)  # TODO 4 and 100 comes from the orignal hn mine call
+    ihnm_callback = IterativeHNMiningCallback(
+        4, 100
+    )  # TODO 4 and 100 comes from the orignal hn mine call
     trainer = SentenceTransformerTrainer(
         model=model,
         args=training_args,
@@ -181,7 +184,7 @@ def main(args: Args):
     # 8. Save the trained model
     # TODO test loading the lora model from sentence transformers
     model.save_pretrained(f"models/{args.run_name}/last")
-    # model.push_to_hub(args.run_name, private=True)
+    # model.push_to_hub(args.run_name, private=True) # TODO reenable
 
 
 if __name__ == "__main__":
@@ -204,14 +207,14 @@ if __name__ == "__main__":
         required=True,
         help="Batch size per gpu for both training and validation",
     )
+    parser.add_argument("--lr", type=float, required=True, help="Peak learning rate")
     parser.add_argument(
         "--n-epochs", type=int, required=True, help="Number of trianing epochs"
     )
     parser.add_argument(
         "--lora-rank",
         type=int,
-        default=8,
-        required=True,
+        required=False,
         help="LoRA rank. Good baseline is 8, try to keep doubling this value",
     )
     parser.add_argument(

@@ -17,7 +17,7 @@ Download dataset.
 ## paraphrase
 Use openai gpt-4o mini to paraphrase the questions and the miconceptions to increase dataset size. For each question and misconception, create 4 more paraphrase. Costs about $0.36
 ```bash
-python -m eedi.paraphrase --dataset-dir=data
+python eedi/paraphrase.py --dataset-dir=data
 ```
 **Note**: this is only done once, you can download paraphrased data [here](https://www.kaggle.com/datasets/evanarlian/eedi-paraphrased). TODO make public later.
 
@@ -66,5 +66,18 @@ ideas:
 * then start iterative
 * curriculum learning (needed?) for top k hard, first try 100, 50, 25, etc. Smallest should be 25.
 
-differences
-* sentence transformers' encode is the same as hf's model(**encoded) blabla on [CLS] token.
+# todo
+* git clean up to main
+* 
+* 
+* lambda automation script (export env in bash, hf login, wandb, telegram api?)
+* wandb log args only log on rank 0. Log global batch size
+* eedi dataloader drop last bc we need big batches
+* how does sentence transformer retain gradient? is there another alternative (no grad and with grad)?
+* add optional lora args param
+* use curriculum learning somehow in the ihnm from 100 to 25
+
+# done
+* only show ihm progress on rank 0 (check first how messy that is on nproc 2)
+* separate dataset concatenation to helper classes so we can repeat in validation
+* 

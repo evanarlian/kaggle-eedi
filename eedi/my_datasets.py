@@ -82,6 +82,17 @@ def make_nice_df(df: pd.DataFrame) -> pd.DataFrame:
     return df_nice
 
 
+def make_complete_query(row: pd.Series) -> str:
+    template = "SUBJECT: {}\n\nCONSTRUCT: {}\n\nQUESTION: {}\n\nCORRECT ANSWER: {}\n\nWRONG ANSWER: {}"
+    return template.format(
+        row["SubjectName"],
+        row["ConstructName"],
+        row["QuestionText"],
+        row["CorrectText"],
+        row["WrongText"],
+    )
+
+
 def hn_mine_sbert(
     model: SentenceTransformer,
     q_texts: list[str],
@@ -90,6 +101,7 @@ def hn_mine_sbert(
     mis_ids: list[int],
     k: int,
     bs: int,
+    tqdm: bool,
 ) -> list[list[int]]:
     """Hard negative mining, but different from: https://www.sbert.net/docs/package_reference/util.html#sentence_transformers.util.mine_hard_negatives.
     Sentence Transformers' version assumes different rows are always negatives, but that is not the case if we use paraphrased data.
@@ -114,7 +126,7 @@ def hn_mine_sbert(
         mis_texts,
         batch_size=bs,
         normalize_embeddings=True,
-        show_progress_bar=True,
+        show_progress_bar=tqdm,
         device="cuda",
     )
     # +10 compensate for same ids
@@ -124,7 +136,7 @@ def hn_mine_sbert(
         q_texts,
         batch_size=bs,
         normalize_embeddings=True,
-        show_progress_bar=True,
+        show_progress_bar=tqdm,
         device="cuda",
     )
     ranks = nn.kneighbors(q_embeds, return_distance=False)

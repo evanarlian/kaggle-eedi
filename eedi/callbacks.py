@@ -37,6 +37,7 @@ class IterativeHNMiningCallback(TrainerCallback):
         curr_train_state = model.training  # save model .train() or .eval() state
         train_ds: TrainDatasetProxy = train_dataloader.dataset  # type: ignore
         model.eval()
+        show_tqdm = state.is_local_process_zero
         new_hards = hn_mine_sbert(
             model=model,
             q_texts=train_ds.q_texts,
@@ -45,6 +46,7 @@ class IterativeHNMiningCallback(TrainerCallback):
             mis_ids=train_ds.mis_ids,
             k=self.top_k_negatives,
             bs=self.bs,
+            tqdm=show_tqdm,
         )
         train_ds.replace_hards(new_hards)
         model.train(curr_train_state)  # return back the model state

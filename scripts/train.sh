@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 set -Eeuxo pipefail
 
-python -m eedi.train_sts_hn \
+# export WANDB_DISABLED='true'
+
+torchrun --nproc-per-node=1 eedi/train_sts_hn.py \
     --paraphrased-path=data/eedi-paraphrased \
     --model=sentence-transformers/all-MiniLM-L6-v2 \
-    --per-device-bs=64 \
-    --n-epochs=10 \
+    --per-device-bs=32 \
+    --lr=2e-5 \
+    --n-epochs=2 \
     --lora-rank=8 \
-    --run-name=debugging-back-in-time
+    --run-name=testing_multigpu
 
 # python -m eedi.train_sts_hn \
 #     --paraphrased-path=data/eedi-paraphrased \
