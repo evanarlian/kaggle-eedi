@@ -80,7 +80,7 @@ def main(args: Args):
     df_val = df.iloc[val_idx]
     df_val = df_val[~df_val["QuestionAiCreated"]].reset_index(drop=True)
     # cache hard negative mining, this is just for fast dev iteration
-    cache = Path(f"hards_{args.model}.json")
+    cache = Path(f"hards_{args.model.replace('/', '_')}.json")
     if cache.exists():
         print("loading from cache")
         with open(cache, "r") as f:
