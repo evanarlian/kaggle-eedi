@@ -12,4 +12,6 @@ def wib_now() -> str:
     return timestamp
 
 
-# TODO add telegram bot notification?
+def is_rank_0():
+    # TODO find a better solution
+    pass

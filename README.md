@@ -67,12 +67,13 @@ ideas:
 * curriculum learning (needed?) for top k hard, first try 100, 50, 25, etc. Smallest should be 25.
 
 # todo
-* lambda automation script (export env in bash, hf login, wandb, telegram api?)
 * wandb log args only log on rank 0. Log global batch size
 * how does sentence transformer retain gradient? is there another alternative (no grad and with grad)?
 * use curriculum learning somehow in the ihnm from 100 to 25
+* why does evaluator spit out np float64? not itemized
 
 # done
+* lambda automation script (export env in bash, hf login, wandb, telegram api?)
 * eedi dataloader drop last bc we need big batches
 * git clean up to main
 * add optional lora args param
@@ -86,7 +87,8 @@ Make new SSH key (just once) and copy to every lambda instances to allow github 
 ```bash
 LAMBDA_IP=104.171.202.136
 ssh-keygen -t ed25519 -f ~/.ssh/lambdalabs -N ""
-scp ~/.ssh/lambdalabs ubuntu@$LAMBDA_IP:/home/ubuntu/.ssh/id_ed25519
+scp ~/.ssh/lambdalabs ubuntu@$LAMBDA_IP:~/.ssh/id_ed25519
+scp -r ~/.kaggle ubuntu@$LAMBDA_IP:~
 ```
 
 On lambda
