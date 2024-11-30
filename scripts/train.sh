@@ -19,3 +19,6 @@ torchrun --nproc-per-node=1 eedi/train_sts_hn.py \
 #     --n-epochs=10 \
 #     --lora-rank=8 \
 #     --run-name=gte-large
+
+
+./scripts/telegram.sh "training embedding done"

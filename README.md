@@ -67,17 +67,15 @@ ideas:
 * curriculum learning (needed?) for top k hard, first try 100, 50, 25, etc. Smallest should be 25.
 
 # todo
-* git clean up to main
-* 
-* 
 * lambda automation script (export env in bash, hf login, wandb, telegram api?)
 * wandb log args only log on rank 0. Log global batch size
-* eedi dataloader drop last bc we need big batches
 * how does sentence transformer retain gradient? is there another alternative (no grad and with grad)?
-* add optional lora args param
 * use curriculum learning somehow in the ihnm from 100 to 25
 
 # done
+* eedi dataloader drop last bc we need big batches
+* git clean up to main
+* add optional lora args param
 * only show ihm progress on rank 0 (check first how messy that is on nproc 2)
 * separate dataset concatenation to helper classes so we can repeat in validation
 * 
