@@ -56,31 +56,11 @@ def get_target_modules(model) -> list[str]:
 def main(args: Args):
     print("LOCAL_RANK", local_rank())
     torch.cuda.set_device(local_rank())  # prevent default cuda:0 in every .cuda() call
-    # TODO how to load lora once in multi gpu trianing?
-    # TODO how to do EVERYTHING in multi gpu training to avoid duplicate work?
-    # 1. load model along with lora
+
+    # 1. load model
     # good lora blog: https://magazine.sebastianraschka.com/p/practical-tips-for-finetuning-llms
     model = SentenceTransformer(args.model, trust_remote_code=True)
-    print("🔥", next(model.parameters()).device)
-    if args.lora_rank is not None:
-        print("using lora")
-        # in sentence transformers, model[0]._modules["auto_model"] is the location of original model
-        lora_modules = get_target_modules(model[0]._modules["auto_model"])
-        peft_config = LoraConfig(
-            task_type=TaskType.FEATURE_EXTRACTION,
-            target_modules=lora_modules,
-            inference_mode=False,
-            r=args.lora_rank,
-            lora_alpha=args.lora_rank * 2,  # just set to 2 * alpha as a rule of thumb
-            lora_dropout=0.2,
-        )
-        model[0]._modules["auto_model"] = get_peft_model(
-            model[0]._modules["auto_model"],  # type: ignore
-            peft_config,
-        )
-        model[0]._modules["auto_model"].print_trainable_parameters()
-    else:
-        print("not using lora")
+
     # 2. load dataset
     # load paraphrased misconception
     df_mis = pd.read_csv(args.paraphrased_path / "misconception_mapping.csv")
@@ -99,8 +79,7 @@ def main(args: Args):
     df_train = df.iloc[train_idx].reset_index(drop=True)
     df_val = df.iloc[val_idx]
     df_val = df_val[~df_val["QuestionAiCreated"]].reset_index(drop=True)
-
-    # TODO caching is not correct, this is just for fast dev iteration
+    # cache hard negative mining, this is just for fast dev iteration
     cache = Path(f"hards_{args.model}.json")
     if cache.exists():
         print("loading from cache")
@@ -121,8 +100,28 @@ def main(args: Args):
         with open(cache, "w") as f:
             json.dump(hards_st, f)
 
-    # TODO numerize all
-    # make hf dataset suitable for sentence transformers and iterative hard negative mining
+    # 3. apply lora AFTER hn mining to make sure the model prediction not random bc of lora
+    if args.lora_rank is not None:
+        print("using lora")
+        # in sentence transformers, model[0]._modules["auto_model"] is the location of original model
+        lora_modules = get_target_modules(model[0]._modules["auto_model"])
+        peft_config = LoraConfig(
+            task_type=TaskType.FEATURE_EXTRACTION,
+            target_modules=lora_modules,
+            inference_mode=False,
+            r=args.lora_rank,
+            lora_alpha=args.lora_rank * 2,  # just set to 2 * alpha as a rule of thumb
+            lora_dropout=0.2,
+        )
+        model[0]._modules["auto_model"] = get_peft_model(
+            model[0]._modules["auto_model"],  # type: ignore
+            peft_config,
+        )
+        model[0]._modules["auto_model"].print_trainable_parameters()
+    else:
+        print("not using lora")
+
+    # 4. make hf dataset suitable for sentence transformers and iterative hard negative mining
     train_dataset = TrainDatasetProxy(
         q_texts=df_train["QuestionComplete"].tolist(),
         q_mis_ids=df_train["MisconceptionId"].tolist(),
@@ -132,7 +131,7 @@ def main(args: Args):
         n_negatives=10,  # TODO check what is the best
     )
 
-    # make evaluator
+    # 5. make sentence transformer evaluator
     q, mis, mapping = make_ir_evaluator_dataset(df_val, orig_mis)
     val_evaluator = InformationRetrievalEvaluator(
         queries=q,
@@ -143,7 +142,10 @@ def main(args: Args):
         show_progress_bar=True,
     )
 
+    # 6. sentence transformer loss
     loss = MultipleNegativesRankingLoss(model)
+
+    # 7. train!
     training_args = SentenceTransformerTrainingArguments(
         # Required parameter:
         output_dir=f"models/{args.run_name}",
@@ -167,24 +169,24 @@ def main(args: Args):
         logging_steps=500,
         run_name=args.run_name,  # Will be used in W&B if `wandb` is installed
     )
-    ihnm_callback = IterativeHNMiningCallback(
-        4, 100
-    )  # TODO 4 and 100 comes from the orignal hn mine call
+    # TODO 4 and 100 comes from the orignal hn mine call
+    ihnm_callback = IterativeHNMiningCallback(bs=4, top_k_negatives=100)
     trainer = SentenceTransformerTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        # eval_dataset=eval_dataset, # TODO dont need eval dataset for now, really?
         loss=loss,
         evaluator=val_evaluator,
         callbacks=[ihnm_callback],
     )
     trainer.train()
 
+    # 8. print final evaluation
     final_val_result = val_evaluator(model)
     print("=== FINAL VAL RESULT ===")
     pprint(final_val_result)
-    # 8. Save the trained model
+
+    # 9. save the trained model
     # TODO test loading the lora model from sentence transformers
     model.save_pretrained(f"models/{args.run_name}/last")
     model.push_to_hub(args.run_name, private=True)
