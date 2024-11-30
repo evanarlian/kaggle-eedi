@@ -8,6 +8,7 @@ from pprint import pprint
 from typing import Optional
 
 import pandas as pd
+import torch
 from peft import LoraConfig, TaskType, get_peft_model  # type: ignore
 from sentence_transformers import (
     SentenceTransformer,
@@ -27,7 +28,7 @@ from eedi.my_datasets import (
     make_complete_query,
     make_ir_evaluator_dataset,
 )
-from eedi.utils import wib_now
+from eedi.utils import local_rank, wib_now
 
 
 @dataclass
@@ -52,11 +53,15 @@ def get_target_modules(model) -> list[str]:
 
 
 def main(args: Args):
+    device = f"cuda:{local_rank()}"
+    print(device)
+    # torch.cuda.set_device(local_rank())
     # TODO how to load lora once in multi gpu trianing?
     # TODO how to do EVERYTHING in multi gpu training to avoid duplicate work?
     # 1. load model along with lora
     # good lora blog: https://magazine.sebastianraschka.com/p/practical-tips-for-finetuning-llms
     model = SentenceTransformer(args.model, trust_remote_code=True)
+    print("🔥", next(model.parameters()).device)
     if args.lora_rank is not None:
         print("using lora")
         # in sentence transformers, model[0]._modules["auto_model"] is the location of original model

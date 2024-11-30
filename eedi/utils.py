@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 import pytz
@@ -12,6 +13,9 @@ def wib_now() -> str:
     return timestamp
 
 
-def is_rank_0():
-    # TODO find a better solution
-    pass
+def local_rank() -> int:
+    return int(os.environ["LOCAL_RANK"])
+
+
+def is_rank_0() -> bool:
+    return local_rank() == 0
