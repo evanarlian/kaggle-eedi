@@ -78,4 +78,50 @@ ideas:
 * add optional lora args param
 * only show ihm progress on rank 0 (check first how messy that is on nproc 2)
 * separate dataset concatenation to helper classes so we can repeat in validation
-* 
+
+# lambdalabs
+My personal flow so
+
+Make new SSH key (just once) and copy to every lambda instances to allow github access. Make sure to add SSH key to github as well.
+```bash
+LAMBDA_IP=104.171.202.136
+ssh-keygen -t ed25519 -f ~/.ssh/lambdalabs -N ""
+scp ~/.ssh/lambdalabs ubuntu@$LAMBDA_IP:/home/ubuntu/.ssh/id_ed25519
+```
+
+On lambda
+
+```bash
+git clone git@github.com:evanarlian/kaggle-eedi.git
+cd kaggle-eedi
+# manually fill .env first
+
+export $(cat .env | xargs)
+```
+
+Open vscode server
+
+Copy .env from local to remote
+
+on lambda again
+```bash
+mkdir -p ~/miniconda3
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
+bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
+rm ~/miniconda3/miniconda.sh
+source ~/miniconda3/bin/activate
+conda init --all
+```
+
+```bash
+conda create -n kaggle_eedi python=3.11 -y
+conda activate kaggle_eedi
+pip install -e .
+```
+
+logins
+```bash
+git config --global credential.helper store
+huggingface-cli login --token $HF_TOKEN --add-to-git-credential
+wandb login $WANDB_TOKEN
+```
