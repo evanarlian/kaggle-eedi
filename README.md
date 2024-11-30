@@ -71,6 +71,7 @@ ideas:
 * how does sentence transformer retain gradient? is there another alternative (no grad and with grad)?
 * use curriculum learning somehow in the ihnm from 100 to 25
 * why does evaluator spit out np float64? not itemized
+* metrics not showing up in wandb!
 
 # done
 * lambda automation script (export env in bash, hf login, wandb, telegram api?)

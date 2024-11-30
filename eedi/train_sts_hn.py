@@ -172,7 +172,7 @@ def main(args: Args):
     # 8. Save the trained model
     # TODO test loading the lora model from sentence transformers
     model.save_pretrained(f"models/{args.run_name}/last")
-    # model.push_to_hub(args.run_name, private=True) # TODO reenable
+    model.push_to_hub(args.run_name, private=True)
 
 
 if __name__ == "__main__":
