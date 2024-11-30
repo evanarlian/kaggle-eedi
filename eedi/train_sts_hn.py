@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from argparse import ArgumentParser
@@ -99,16 +100,26 @@ def main(args: Args):
     df_val = df.iloc[val_idx]
     df_val = df_val[~df_val["QuestionAiCreated"]].reset_index(drop=True)
 
-    hards_st = hn_mine_sbert(
-        model,
-        q_texts=df_train["QuestionComplete"].tolist(),
-        q_mis_ids=df_train["MisconceptionId"].tolist(),
-        mis_texts=df_mis["MisconceptionText"].tolist(),
-        mis_ids=df_mis["MisconceptionId"].tolist(),
-        k=100,
-        bs=4,
-        tqdm=local_rank() == 0,
-    )
+    # TODO caching is not correct, this is just for fast dev iteration
+    cache = Path(f"hards_{args.model}.json")
+    if cache.exists():
+        print("loading from cache")
+        with open(cache, "r") as f:
+            hards_st = json.load(f)
+    else:
+        print("no hard negative cache, precomputing")
+        hards_st = hn_mine_sbert(
+            model,
+            q_texts=df_train["QuestionComplete"].tolist(),
+            q_mis_ids=df_train["MisconceptionId"].tolist(),
+            mis_texts=df_mis["MisconceptionText"].tolist(),
+            mis_ids=df_mis["MisconceptionId"].tolist(),
+            k=100,
+            bs=4,
+            tqdm=True,
+        )
+        with open(cache, "w") as f:
+            json.dump(hards_st, f)
 
     # TODO numerize all
     # make hf dataset suitable for sentence transformers and iterative hard negative mining
