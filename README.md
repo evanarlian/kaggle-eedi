@@ -1,6 +1,8 @@
 # kaggle-eedi
 Eedi - Mining Misconceptions in Mathematics
 
+# note: just realized that DDP is not what people use for large model training :(
+
 # preparation
 Make virtual env and install deps.
 ```bash
