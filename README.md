@@ -95,8 +95,8 @@ On lambda
 git clone git@github.com:evanarlian/kaggle-eedi.git
 cd kaggle-eedi
 # manually fill .env first
-
 export $(cat .env | xargs)
+cp ./scripts/.tmux.conf ~/
 ```
 
 Open vscode server
