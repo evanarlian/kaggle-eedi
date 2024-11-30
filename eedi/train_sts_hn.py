@@ -116,7 +116,7 @@ def main(args: Args):
             mis_ids=df_mis["MisconceptionId"].tolist(),
             k=100,
             bs=4,
-            tqdm=True,
+            tqdm=local_rank() == 0,
         )
         with open(cache, "w") as f:
             json.dump(hards_st, f)
