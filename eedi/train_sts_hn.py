@@ -6,36 +6,26 @@ from dataclasses import dataclass
 from html import parser
 from pathlib import Path
 from pprint import pprint
-from typing import Optional
+from typing import Literal, Optional
 
 import pandas as pd
-import torch
+from accelerate import Accelerator
 from peft import LoraConfig, TaskType, get_peft_model  # type: ignore
-from sentence_transformers import (
-    SentenceTransformer,
-    SentenceTransformerTrainer,
-    SentenceTransformerTrainingArguments,
-)
-from sentence_transformers.evaluation import InformationRetrievalEvaluator
-from sentence_transformers.losses import MultipleNegativesRankingLoss
-from sentence_transformers.training_args import BatchSamplers
 from sklearn.model_selection import GroupShuffleSplit
-from transformers import BertModel
+from transformers import AutoModel, AutoTokenizer, BertModel, TrainingArguments
 
 from eedi.callbacks import IterativeHNMiningCallback
-from eedi.my_datasets import (
-    TrainDatasetProxy,
-    hn_mine_sbert,
-    make_complete_query,
-    make_ir_evaluator_dataset,
-)
-from eedi.utils import local_rank, wib_now
+from eedi.datasets import EvalDataset, TrainDataset, hn_mine_hf, make_complete_query
+from eedi.losses import MultipleNegativesRankingLoss
+from eedi.trainer import MyTrainer
+from eedi.utils import wib_now
 
 
 @dataclass
 class Args:
     paraphrased_path: Path
     model: str
+    token_pool: Literal["first", "last"]
     per_device_bs: int
     lr: float
     n_epochs: int
@@ -54,12 +44,12 @@ def get_target_modules(model) -> list[str]:
 
 
 def main(args: Args):
-    print("LOCAL_RANK", local_rank())
-    torch.cuda.set_device(local_rank())  # prevent default cuda:0 in every .cuda() call
+    ac = Accelerator()
 
     # 1. load model
     # good lora blog: https://magazine.sebastianraschka.com/p/practical-tips-for-finetuning-llms
-    model = SentenceTransformer(args.model, trust_remote_code=True)
+    model = AutoModel.from_pretrained(args.model, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
 
     # 2. load dataset
     # load paraphrased misconception
@@ -80,73 +70,67 @@ def main(args: Args):
     df_val = df.iloc[val_idx]
     df_val = df_val[~df_val["QuestionAiCreated"]].reset_index(drop=True)
     # cache hard negative mining, this is just for fast dev iteration
-    cache = Path(f"hards_{args.model.replace('/', '_')}.json")
-    if cache.exists():
-        print("loading from cache")
-        with open(cache, "r") as f:
-            hards_st = json.load(f)
-    else:
-        print("no hard negative cache, precomputing")
-        hards_st = hn_mine_sbert(
-            model,
-            q_texts=df_train["QuestionComplete"].tolist(),
-            q_mis_ids=df_train["MisconceptionId"].tolist(),
-            mis_texts=df_mis["MisconceptionText"].tolist(),
-            mis_ids=df_mis["MisconceptionId"].tolist(),
-            k=100,
-            bs=4,
-            tqdm=local_rank() == 0,
-        )
-        with open(cache, "w") as f:
-            json.dump(hards_st, f)
+    with ac.main_process_first():
+        cache = Path(f"hards_{args.model.replace('/', '_')}.json")
+        if cache.exists():
+            print("loading from cache")
+            with open(cache, "r") as f:
+                hards_st = json.load(f)
+        else:
+            print("no hard negative cache, precomputing")
+            hards_st = hn_mine_hf(
+                model,
+                tokenizer,  # type: ignore
+                q_texts=df_train["QuestionComplete"].tolist(),
+                q_mis_ids=df_train["MisconceptionId"].tolist(),
+                mis_texts=df_mis["MisconceptionText"].tolist(),
+                mis_ids=df_mis["MisconceptionId"].tolist(),
+                k=100,
+                bs=4,
+                token_pool=args.token_pool,
+                device=ac.device,
+            )
+            with open(cache, "w") as f:
+                json.dump(hards_st, f)
 
     # 3. apply lora AFTER hn mining to make sure the model prediction not random bc of lora
     if args.lora_rank is not None:
         print("using lora")
-        # in sentence transformers, model[0]._modules["auto_model"] is the location of original model
-        lora_modules = get_target_modules(model[0]._modules["auto_model"])
+        target_modules = get_target_modules(model)
         peft_config = LoraConfig(
             task_type=TaskType.FEATURE_EXTRACTION,
-            target_modules=lora_modules,
+            target_modules=target_modules,
             inference_mode=False,
             r=args.lora_rank,
             lora_alpha=args.lora_rank * 2,  # just set to 2 * alpha as a rule of thumb
             lora_dropout=0.2,
         )
-        model[0]._modules["auto_model"] = get_peft_model(
-            model[0]._modules["auto_model"],  # type: ignore
-            peft_config,
-        )
-        model[0]._modules["auto_model"].print_trainable_parameters()
+        model = get_peft_model(model, peft_config)
+        model.print_trainable_parameters()
     else:
         print("not using lora")
 
-    # 4. make hf dataset suitable for sentence transformers and iterative hard negative mining
-    train_dataset = TrainDatasetProxy(
+    # 4. make datasets
+    train_dataset = TrainDataset(
         q_texts=df_train["QuestionComplete"].tolist(),
         q_mis_ids=df_train["MisconceptionId"].tolist(),
         mis_texts=df_mis["MisconceptionText"].tolist(),
         mis_ids=df_mis["MisconceptionId"].tolist(),
         hards=hards_st,
-        n_negatives=10,  # TODO check what is the best
+        n_negatives=10,
+    )
+    eval_dataset = EvalDataset(
+        q_texts=df_train["QuestionComplete"].tolist(),
+        q_mis_ids=df_train["MisconceptionId"].tolist(),
+        mis_texts=df_mis["MisconceptionText"].tolist(),
     )
 
-    # 5. make sentence transformer evaluator
-    q, mis, mapping = make_ir_evaluator_dataset(df_val, orig_mis)
-    val_evaluator = InformationRetrievalEvaluator(
-        queries=q,
-        corpus=mis,
-        relevant_docs=mapping,
-        map_at_k=[1, 3, 5, 10, 25],
-        batch_size=4,
-        show_progress_bar=True,
-    )
-
-    # 6. sentence transformer loss
-    loss = MultipleNegativesRankingLoss(model)
+    # 6. loss
+    loss = MultipleNegativesRankingLoss()
 
     # 7. train!
-    training_args = SentenceTransformerTrainingArguments(
+    # TODO check hf docs
+    training_args = TrainingArguments(
         # Required parameter:
         output_dir=f"models/{args.run_name}",
         # Optional training parameters:
@@ -157,7 +141,6 @@ def main(args: Args):
         warmup_ratio=0.1,
         fp16=True,  # Set to False if you get an error that your GPU can't run on FP16
         bf16=False,  # Set to True if you have a GPU that supports BF16
-        batch_sampler=BatchSamplers.NO_DUPLICATES,  # MultipleNegativesRankingLoss benefits from no duplicate samples in a batch TODO check is this is the slow and memory hog culprit
         dataloader_drop_last=True,
         dataloader_num_workers=1,  # we are only getting text so it will be fast
         # Optional tracking/debugging parameters:
@@ -170,19 +153,23 @@ def main(args: Args):
         run_name=args.run_name,  # Will be used in W&B if `wandb` is installed
     )
     # TODO 4 and 100 comes from the orignal hn mine call
-    ihnm_callback = IterativeHNMiningCallback(bs=4, top_k_negatives=100)
-    trainer = SentenceTransformerTrainer(
+    # TODO the callback need to be changed to standard hf model and tokenizer
+    ihnm_callback = IterativeHNMiningCallback(
+        bs=4, top_k_negatives=100, token_pool=args.token_pool
+    )
+    # TODO fic
+    trainer = MyTrainer(
         model=model,
+        tokenizer=tokenizer,  # normally not needed if you use data collator, but i need it for iterative hn mining callback
         args=training_args,
+        data_collator=None,  # TODO inject using the tokenizer
         train_dataset=train_dataset,
-        loss=loss,
-        evaluator=val_evaluator,
+        eval_dataset=eval_dataset,
         callbacks=[ihnm_callback],
     )
     trainer.train()
 
     # 8. print final evaluation
-    final_val_result = val_evaluator(model)
     print("=== FINAL VAL RESULT ===")
     pprint(final_val_result)
 
@@ -205,6 +192,13 @@ if __name__ == "__main__":
         type=str,
         required=True,
         help="Pretrained model name from huggingface or local path",
+    )
+    parser.add_argument(
+        "--token-pool",
+        type=str,
+        required=True,
+        choices=["first", "last"],
+        help="What token used for pooling, for encoders usually first (CLS), for decoders usually last (EOS)",
     )
     parser.add_argument(
         "--per-device-bs",

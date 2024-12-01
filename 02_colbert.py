@@ -13,7 +13,7 @@ from transformers import AutoModel, AutoTokenizer
 
 from eedi.colbert import late_interaction
 from eedi.metrics import map_at_k, rank_dist
-from eedi.my_datasets import make_nice_df
+from eedi.datasets import make_nice_df
 
 
 @dataclass

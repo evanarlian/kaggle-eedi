@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 
-from eedi.my_datasets import make_nice_df
+from eedi.datasets import make_nice_df
 
 
 @dataclass

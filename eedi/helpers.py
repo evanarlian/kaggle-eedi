@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 
 import torch
 import torch.nn.functional as F
@@ -28,12 +28,12 @@ def batched_inference(
     bs: int,
     token_pool: Literal["first", "last"],
     device: torch.device,
-    desc: str,
+    desc: Optional[str],
 ) -> Tensor:
     """Basically SentenceTransformer.encode, but consume less vram."""
     # TODO add token pool, review the last_token_pool code because i dont like it
     embeddings = []
-    for i in tqdm(range(0, len(texts), bs), desc=desc):
+    for i in tqdm(range(0, len(texts), bs), desc=desc, disable=desc is None):
         # max_length=256 comes from plotting the complete question text, and 256 covers 99%
         # TODO check again abt this statement!
         encoded = tokenizer(

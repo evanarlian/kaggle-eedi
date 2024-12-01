@@ -8,7 +8,7 @@ import torch
 from sentence_transformers import SentenceTransformer
 
 from eedi.metrics import map_at_k, rank_dist
-from eedi.my_datasets import make_nice_df
+from eedi.datasets import make_nice_df
 
 
 @dataclass
