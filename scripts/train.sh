@@ -13,14 +13,15 @@ notify_failure() {
 trap notify_failure ERR
 
 # Main script logic
-torchrun --nproc-per-node=2 eedi/train_sts_hn.py \
+torchrun --nproc-per-node=1 eedi/train_sts_hn.py \
     --paraphrased-path=data/eedi-paraphrased \
-    --model=Alibaba-NLP/gte-large-en-v1.5 \
+    --model=sentence-transformers/all-MiniLM-L6-v2 \
+    --token-pool=first \
     --per-device-bs=64 \
     --lr=1e-4 \
     --n-epochs=3 \
     --lora-rank=16 \
-    --run-name=gte-large-proper
+    --run-name=redoit-again
 
 # If training succeeds, send success notification
 notify_success

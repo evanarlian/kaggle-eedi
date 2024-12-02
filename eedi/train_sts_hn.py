@@ -15,8 +15,13 @@ from sklearn.model_selection import GroupShuffleSplit
 from transformers import AutoModel, AutoTokenizer, BertModel, TrainingArguments
 
 from eedi.callbacks import IterativeHNMiningCallback
-from eedi.datasets import EvalDataset, TrainDataset, hn_mine_hf, make_complete_query
-from eedi.losses import MultipleNegativesRankingLoss
+from eedi.datasets import (
+    EvalDataset,
+    MyCollator,
+    TrainDataset,
+    hn_mine_hf,
+    make_complete_query,
+)
 from eedi.trainer import MyTrainer
 from eedi.utils import wib_now
 
@@ -47,8 +52,7 @@ def main(args: Args):
     ac = Accelerator()
 
     # 1. load model
-    # good lora blog: https://magazine.sebastianraschka.com/p/practical-tips-for-finetuning-llms
-    model = AutoModel.from_pretrained(args.model, trust_remote_code=True)
+    model = AutoModel.from_pretrained(args.model, trust_remote_code=True).to(ac.device)
     tokenizer = AutoTokenizer.from_pretrained(args.model)
 
     # 2. load dataset
@@ -70,6 +74,7 @@ def main(args: Args):
     df_val = df.iloc[val_idx]
     df_val = df_val[~df_val["QuestionAiCreated"]].reset_index(drop=True)
     # cache hard negative mining, this is just for fast dev iteration
+    # TODO this is not really needed anymore because we have hard negative mining on epoch start
     with ac.main_process_first():
         cache = Path(f"hards_{args.model.replace('/', '_')}.json")
         if cache.exists():
@@ -80,7 +85,7 @@ def main(args: Args):
             print("no hard negative cache, precomputing")
             hards_st = hn_mine_hf(
                 model,
-                tokenizer,  # type: ignore
+                tokenizer,
                 q_texts=df_train["QuestionComplete"].tolist(),
                 q_mis_ids=df_train["MisconceptionId"].tolist(),
                 mis_texts=df_mis["MisconceptionText"].tolist(),
@@ -89,11 +94,13 @@ def main(args: Args):
                 bs=4,
                 token_pool=args.token_pool,
                 device=ac.device,
+                tqdm=True,
             )
             with open(cache, "w") as f:
                 json.dump(hards_st, f)
 
     # 3. apply lora AFTER hn mining to make sure the model prediction not random bc of lora
+    # good lora blog: https://magazine.sebastianraschka.com/p/practical-tips-for-finetuning-llms
     if args.lora_rank is not None:
         print("using lora")
         target_modules = get_target_modules(model)
@@ -122,12 +129,21 @@ def main(args: Args):
     eval_dataset = EvalDataset(
         q_texts=df_train["QuestionComplete"].tolist(),
         q_mis_ids=df_train["MisconceptionId"].tolist(),
-        mis_texts=df_mis["MisconceptionText"].tolist(),
+        mis_texts=orig_mis,
     )
 
-    # 6. loss
-    loss = MultipleNegativesRankingLoss()
+    # 5. make callback for iterative hn mining
+    # TODO 4 and 100 comes from the orignal hn mine call
+    # TODO the callback need to be changed to standard hf model and tokenizer
+    ihnm_callback = IterativeHNMiningCallback(
+        bs=4, top_k_negatives=100, token_pool=args.token_pool
+    )
 
+    # 6. make data collator because we use custom dataset
+    # this has to be BEFORE instantiating TrainingArguments because somehow the accelerator.device got wiped
+    data_collator = MyCollator(tokenizer, ac.device)
+
+    # TODO fix renumbering
     # 7. train!
     # TODO check hf docs
     training_args = TrainingArguments(
@@ -143,26 +159,23 @@ def main(args: Args):
         bf16=False,  # Set to True if you have a GPU that supports BF16
         dataloader_drop_last=True,
         dataloader_num_workers=1,  # we are only getting text so it will be fast
+        remove_unused_columns=False,  # NOTE: we dont use hf dataset so tell hf not to mess with anything
         # Optional tracking/debugging parameters:
+        eval_on_start=True,
         eval_strategy="steps",
-        eval_steps=500,
+        eval_steps=500,  # TODO per epoch??
         save_strategy="steps",
         save_steps=500,
         save_total_limit=5,
         logging_steps=500,
         run_name=args.run_name,  # Will be used in W&B if `wandb` is installed
     )
-    # TODO 4 and 100 comes from the orignal hn mine call
-    # TODO the callback need to be changed to standard hf model and tokenizer
-    ihnm_callback = IterativeHNMiningCallback(
-        bs=4, top_k_negatives=100, token_pool=args.token_pool
-    )
-    # TODO fic
     trainer = MyTrainer(
         model=model,
         tokenizer=tokenizer,  # normally not needed if you use data collator, but i need it for iterative hn mining callback
+        token_pool=args.token_pool,
         args=training_args,
-        data_collator=None,  # TODO inject using the tokenizer
+        data_collator=data_collator,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         callbacks=[ihnm_callback],

@@ -4,11 +4,11 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 from tqdm.auto import tqdm
-from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 
 def last_token_pool(last_hidden_states: Tensor, attention_mask: Tensor) -> Tensor:
-    # TODO i dont like this
+    # copied from: https://huggingface.co/Salesforce/SFR-Embedding-2_R
     left_padding = attention_mask[:, -1].sum() == attention_mask.shape[0]
     if left_padding:
         return last_hidden_states[:, -1]
@@ -23,7 +23,7 @@ def last_token_pool(last_hidden_states: Tensor, attention_mask: Tensor) -> Tenso
 @torch.inference_mode()
 def batched_inference(
     model: PreTrainedModel,
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: PreTrainedTokenizerBase,
     texts: list[str],
     bs: int,
     token_pool: Literal["first", "last"],
@@ -31,11 +31,9 @@ def batched_inference(
     desc: Optional[str],
 ) -> Tensor:
     """Basically SentenceTransformer.encode, but consume less vram."""
-    # TODO add token pool, review the last_token_pool code because i dont like it
     embeddings = []
     for i in tqdm(range(0, len(texts), bs), desc=desc, disable=desc is None):
         # max_length=256 comes from plotting the complete question text, and 256 covers 99%
-        # TODO check again abt this statement!
         encoded = tokenizer(
             texts[i : i + bs],
             max_length=256,

@@ -6,7 +6,7 @@ import pandas as pd
 import torch
 from sklearn.neighbors import NearestNeighbors
 from torch.utils.data import Dataset
-from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 from eedi.helpers import batched_inference
 
@@ -95,7 +95,7 @@ def make_complete_query(row: pd.Series) -> str:
 
 def hn_mine_hf(
     model: PreTrainedModel,
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: PreTrainedTokenizerBase,
     q_texts: list[str],
     q_mis_ids: list[int],
     mis_texts: list[str],
@@ -111,7 +111,7 @@ def hn_mine_hf(
 
     Args:
         model (PreTrainedModel): Huggingface model.
-        tokenizer (PreTrainedTokenizer): Huggingface tokenizer.
+        tokenizer (PreTrainedTokenizerBase): Huggingface tokenizer.
         q_texts (list[str]): Question texts.
         q_mis_ids (list[int]): Ground truth misconception ids for the questions.
         mis_texts (list[str]): Misconception texts.
@@ -222,3 +222,28 @@ class EvalDataset(Dataset):
             "anchor": self.q_texts[i],
             "pos": self.mis_texts[self.q_mis_ids[i]],
         }
+
+
+class MyCollator:
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, device: torch.device):
+        self.tokenizer = tokenizer
+
+    def __call__(self, batch: list[dict]) -> dict:
+        anchors = [row["anchor"] for row in batch]
+        positives = [row["pos"] for row in batch]
+        negatives = [item for row in batch for item in row["negs"]]
+        encoded_anchor = self.tokenizer(
+            anchors,
+            max_length=256,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+        )
+        encoded_pos_neg = self.tokenizer(
+            positives + negatives,
+            max_length=256,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+        )
+        return {"anchor": encoded_anchor, "pos_neg": encoded_pos_neg}
