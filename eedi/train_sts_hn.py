@@ -132,10 +132,8 @@ def main(args: Args):
     )
 
     # 5. make callback for iterative hn mining
-    # TODO 4 and 100 comes from the orignal hn mine call
-    # TODO the callback need to be changed to standard hf model and tokenizer
     ihnm_callback = IterativeHNMiningCallback(
-        bs=4, top_k_negatives=100, token_pool=args.token_pool
+        bs=args.per_device_bs, top_k_negatives=100, token_pool=args.token_pool
     )
 
     # 6. make data collator because we use custom dataset
@@ -179,6 +177,7 @@ def main(args: Args):
         callbacks=[ihnm_callback],
     )
     trainer.train()
+    trainer.evaluate()  # TODO check on where this landed on wandb
 
     # 9. save the trained model
     # TODO test loading the lora model from sentence transformers

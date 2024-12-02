@@ -58,30 +58,14 @@ on models to choose:
 * i chose simple model first like alibaba gte because it might work lol
 * the next llm model to choose is the salesforce SFR, since that is already done by that chinese person. also SFR can work with sentence transformers without much code changes.
 
-locked in:
-* check transformers callback and change dataset hards, using manual batched inference
-
-
-ideas:
-* start very simple by skipping paraphrased
-* use paraphrased. play with n_negatives retrieved.
-* then start iterative
-* curriculum learning (needed?) for top k hard, first try 100, 50, 25, etc. Smallest should be 25.
-
 # todo
 * wandb log args only log on rank 0. Log global batch size
-* how does sentence transformer retain gradient? is there another alternative (no grad and with grad)?
-* use curriculum learning somehow in the ihnm from 100 to 25
-* why does evaluator spit out np float64? not itemized
-* metrics not showing up in wandb!
-
-# done
-* lambda automation script (export env in bash, hf login, wandb, telegram api?)
-* eedi dataloader drop last bc we need big batches
-* git clean up to main
-* add optional lora args param
-* only show ihm progress on rank 0 (check first how messy that is on nproc 2)
-* separate dataset concatenation to helper classes so we can repeat in validation
+* how to do eval only on rank 0 deepspeed?
+* use grad accumulation for larger models
+* try deepspeed offloading to see the memory difference
+* is there a way to avoid stateful config? (accelerate config is stateful and i prefer the explicit way)
+* solve 'key' keyerror during psuh to hub, make sure only rank0 does that. Tokenizer is not pushed!!!!
+* review all device-related stuffs
 
 # lambdalabs
 My personal flow so
@@ -124,6 +108,10 @@ conda init --all
 conda create -n kaggle_eedi python=3.11 -y
 conda activate kaggle_eedi
 pip install -e .
+```
+
+```bash
+accelerate config
 ```
 
 logins
