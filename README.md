@@ -87,6 +87,8 @@ ideas:
 My personal flow so
 
 Make new SSH key (just once) and copy to every lambda instances to allow github access. Make sure to add SSH key to github as well.
+
+TODO copy tmux from here too, dont do it from this repo!
 ```bash
 LAMBDA_IP=104.171.202.136
 ssh-keygen -t ed25519 -f ~/.ssh/lambdalabs -N ""

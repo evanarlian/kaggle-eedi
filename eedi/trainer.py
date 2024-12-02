@@ -10,10 +10,13 @@ from eedi.metrics import map_at_k, rank_dist
 
 
 class MyTrainer(Trainer):
-    def __init__(self, token_pool: Literal["first", "last"], *args, **kwargs) -> None:
+    def __init__(
+        self, token_pool: Literal["first", "last"], bs: int, *args, **kwargs
+    ) -> None:
         super().__init__(*args, **kwargs)
         self.loss = MultipleNegativesRankingLoss()
         self.token_pool: Literal["first", "last"] = token_pool
+        self.bs = bs
 
     def compute_loss(
         self, model: PreTrainedModel, inputs: dict, return_outputs: bool = False
@@ -43,7 +46,7 @@ class MyTrainer(Trainer):
             self.model,  # type: ignore
             self.tokenizer,  # type: ignore
             texts=self.eval_dataset.q_texts,
-            bs=4,
+            bs=self.bs,
             token_pool=self.token_pool,
             device=device,
             desc="eval q",
@@ -52,7 +55,7 @@ class MyTrainer(Trainer):
             self.model,  # type: ignore
             self.tokenizer,  # type: ignore
             texts=self.eval_dataset.mis_texts,
-            bs=4,
+            bs=self.bs,
             token_pool=self.token_pool,
             device=device,
             desc="eval mis",

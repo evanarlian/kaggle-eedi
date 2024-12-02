@@ -5,7 +5,6 @@ from argparse import ArgumentParser
 from dataclasses import dataclass
 from html import parser
 from pathlib import Path
-from pprint import pprint
 from typing import Literal, Optional
 
 import pandas as pd
@@ -172,6 +171,7 @@ def main(args: Args):
         model=model,
         tokenizer=tokenizer,  # normally not needed if you use data collator, but i need it for iterative hn mining callback
         token_pool=args.token_pool,
+        bs=args.per_device_bs,
         args=training_args,
         data_collator=data_collator,
         train_dataset=train_dataset,
