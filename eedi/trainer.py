@@ -1,10 +1,12 @@
 from typing import Literal
 
+import torch
 from transformers import PreTrainedModel, Trainer
 
 from eedi.datasets import EvalDataset
 from eedi.helpers import batched_inference, last_token_pool
 from eedi.losses import MultipleNegativesRankingLoss
+from eedi.metrics import map_at_k, rank_dist
 
 
 class MyTrainer(Trainer):
@@ -32,21 +34,43 @@ class MyTrainer(Trainer):
             assert False, "impossible during Trainer.compute_loss"
         return self.loss(out_anchor_pooled, out_pos_neg_pooled)
 
-    def evaluate(
-        self,
-        eval_dataset: EvalDataset,
-        ignore_keys=None,
-        metric_key_prefix: str = "eval",
-    ) -> dict[str, float]:
+    def evaluate(self, *args, **kwargs) -> dict[str, float]:
+        self.eval_dataset: EvalDataset
+        is_training_state = self.model.training
+        self.model.eval()
         device = next(self.model.parameters()).device
-        batched_inference(
-            self.model,
-            self.tokenizer,
-            texts=eval_dataset.q_texts,
+        q_embs = batched_inference(
+            self.model,  # type: ignore
+            self.tokenizer,  # type: ignore
+            texts=self.eval_dataset.q_texts,
             bs=4,
-            token_pool="first",
+            token_pool=self.token_pool,
             device=device,
-            desc="eval",
+            desc="eval q",
         )
-        
-        return {"_fake": 0.7}
+        mis_embs = batched_inference(
+            self.model,  # type: ignore
+            self.tokenizer,  # type: ignore
+            texts=self.eval_dataset.mis_texts,
+            bs=4,
+            token_pool=self.token_pool,
+            device=device,
+            desc="eval mis",
+        )
+        similarities = q_embs @ mis_embs.T
+        labels = torch.tensor(self.eval_dataset.q_mis_ids)
+        map_at_25 = map_at_k(labels, similarities, k=25)
+        map_at_5 = map_at_k(labels, similarities, k=5)
+        map_at_1 = map_at_k(labels, similarities, k=1)
+        output_metrics = {
+            "eval/cosine_map@25": map_at_25,
+            "eval/cosine_map@5": map_at_5,
+            "eval/cosine_map@1": map_at_1,
+        }
+        self.log(output_metrics)
+        rank_distributions = rank_dist(labels, similarities, k=25)
+        print("====== RANK DIST =======")
+        for rank, count in rank_distributions.items():
+            print(f"rank {rank}: {count} ({count/labels.size(0):.2%})")
+        self.model.train(is_training_state)
+        return output_metrics

@@ -32,8 +32,7 @@ class IterativeHNMiningCallback(TrainerCallback):
         self.top_k_negatives = top_k_negatives
         self.token_pool: Literal["first", "last"] = token_pool
 
-    # TODO check if en epoch end enough? is this too often? we can modify this using TrainerState
-    def on_epoch_end(
+    def on_epoch_start(
         self,
         args: TrainingArguments,
         state: TrainerState,

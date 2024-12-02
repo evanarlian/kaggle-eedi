@@ -133,7 +133,7 @@ def hn_mine_hf(
         bs=bs,
         token_pool=token_pool,
         device=device,
-        desc="Misconceptions" if tqdm else None,
+        desc="hn mine mis" if tqdm else None,
     ).numpy()
     # +10 compensate for same ids
     nn = NearestNeighbors(n_neighbors=k + 10, algorithm="brute", metric="cosine")
@@ -145,7 +145,7 @@ def hn_mine_hf(
         bs=bs,
         token_pool=token_pool,
         device=device,
-        desc="Questions" if tqdm else None,
+        desc="hn mine q" if tqdm else None,
     ).numpy()
     ranks = nn.kneighbors(q_embeds, return_distance=False)
     hards = []

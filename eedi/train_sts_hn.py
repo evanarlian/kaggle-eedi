@@ -143,7 +143,6 @@ def main(args: Args):
     # this has to be BEFORE instantiating TrainingArguments because somehow the accelerator.device got wiped
     data_collator = MyCollator(tokenizer, ac.device)
 
-    # TODO fix renumbering
     # 7. train!
     # TODO check hf docs
     training_args = TrainingArguments(
@@ -162,12 +161,11 @@ def main(args: Args):
         remove_unused_columns=False,  # NOTE: we dont use hf dataset so tell hf not to mess with anything
         # Optional tracking/debugging parameters:
         eval_on_start=True,
-        eval_strategy="steps",
-        eval_steps=500,  # TODO per epoch??
-        save_strategy="steps",
-        save_steps=500,
+        eval_strategy="epoch",
+        save_strategy="epoch",
         save_total_limit=5,
-        logging_steps=500,
+        logging_strategy="steps",
+        logging_steps=50,
         run_name=args.run_name,  # Will be used in W&B if `wandb` is installed
     )
     trainer = MyTrainer(
@@ -181,10 +179,6 @@ def main(args: Args):
         callbacks=[ihnm_callback],
     )
     trainer.train()
-
-    # 8. print final evaluation
-    print("=== FINAL VAL RESULT ===")
-    pprint(final_val_result)
 
     # 9. save the trained model
     # TODO test loading the lora model from sentence transformers
@@ -238,6 +232,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args = Args(**vars(args))
     os.environ["WANDB_PROJECT"] = "kaggle-eedi"
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     args.run_name = f"{args.run_name}_{wib_now()}"
     print(args)
     main(args)
