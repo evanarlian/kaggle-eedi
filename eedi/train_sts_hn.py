@@ -8,10 +8,23 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import pandas as pd
+import torch
 from accelerate import Accelerator
-from peft import LoraConfig, TaskType, get_peft_model  # type: ignore
+from peft import (
+    LoraConfig,  # type: ignore
+    TaskType,  # type: ignore
+    get_peft_model,  # type: ignore
+    prepare_model_for_kbit_training,  # type: ignore
+)
 from sklearn.model_selection import GroupShuffleSplit
-from transformers import AutoModel, AutoTokenizer, BertModel, TrainingArguments
+from transformers import (
+    AutoModel,
+    AutoTokenizer,
+    BertModel,
+    BitsAndBytesConfig,
+    MistralModel,
+    TrainingArguments,
+)
 
 from eedi.callbacks import IterativeHNMiningCallback
 from eedi.datasets import (
@@ -42,6 +55,8 @@ def get_target_modules(model) -> list[str]:
         return ["query", "key", "value", "dense"]
     elif re.search(r"Alibaba-NLP.+NewModel", str(type(model))):
         return ["qkv_proj", "o_proj", "up_gate_proj", "down_proj"]
+    elif isinstance(model, MistralModel):
+        return ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]  # fmt: off
     raise ValueError(
         f"Model with type {type(model)} is unsupported, please manually inspect and add lora modules."
     )
@@ -50,8 +65,19 @@ def get_target_modules(model) -> list[str]:
 def main(args: Args):
     ac = Accelerator()
 
-    # 1. load model
-    model = AutoModel.from_pretrained(args.model, trust_remote_code=True).to(ac.device)
+    # 1. load model with qlora
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16,  # this is the q in qlora
+    )
+    model = AutoModel.from_pretrained(
+        args.model, quantization_config=bnb_config, trust_remote_code=True
+    )  # TODO check, this model does not use ac.device anymore
+    # necessary preparation
+    model.gradient_checkpointing_enable()
+    model = prepare_model_for_kbit_training(model)
     tokenizer = AutoTokenizer.from_pretrained(args.model)
 
     # 2. load dataset

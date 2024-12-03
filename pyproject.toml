@@ -21,6 +21,7 @@ dependencies = [
     "openai==1.53.0",
     "wandb==0.18.7",
     "deepspeed==0.16.0",
+    "bitsandbytes==0.44.1",
 ]
 
 [tool.setuptools]
