@@ -1,7 +1,6 @@
 # kaggle-eedi
 Eedi - Mining Misconceptions in Mathematics
 
-# note: just realized that DDP is not what people use for large model training :(
 
 # preparation
 Make virtual env and install deps.
@@ -39,33 +38,17 @@ MASTERPLAN:
 2. [DONE] find out about the llm model that does not require trust remote code. Nvidia nvembed v2 is super bad because it need to change the sentence transformer code.
 3. finetune the model based on KDE(?) cup 1st winner code on kaggle. Ref: https://www.kaggle.com/competitions/eedi-mining-misconceptions-in-mathematics/discussion/543519
 4. after rerank, ask qwen math to select the most appropriate misconception
-   1. fix notebooks and stray py files
+5. fix notebooks and stray py files (unimportant, do it last)
 
-# lingering problems:
-gpu problems
-* check raw hf (non sentence transformer mem usage forward backward), fp16, with lora and not with lora
-* check the effect of not loading the model to gpu (automatically) during the first load
-* MultipleNegativeLoss might influence gpu vram usage
-
-dataset problem:
-* how to change dataset mid training
-* dataset proxy, add custom method to do iterative hn. Called from callback
-* How to do this only from the rank0?
-  
-
-# notes
-on models to choose:
-* i chose simple model first like alibaba gte because it might work lol
-* the next llm model to choose is the salesforce SFR, since that is already done by that chinese person. also SFR can work with sentence transformers without much code changes.
 
 # todo
 * wandb log args only log on rank 0. Log global batch size
 * how to do eval only on rank 0 deepspeed?
 * use grad accumulation for larger models
-* try deepspeed offloading to see the memory difference
+* try deepspeed offloading (cpu) to see the memory difference
 * is there a way to avoid stateful config? (accelerate config is stateful and i prefer the explicit way)
 * solve 'key' keyerror during psuh to hub, make sure only rank0 does that. Tokenizer is not pushed!!!!
-* review all device-related stuffs
+* review all device-related stuffs (done but not checked yet)
 
 # lambdalabs
 My personal flow so
@@ -74,7 +57,7 @@ Make new SSH key (just once) and copy to every lambda instances to allow github 
 
 TODO copy tmux from here too, dont do it from this repo!
 ```bash
-LAMBDA_IP=104.171.202.136
+LAMBDA_IP=...
 ssh-keygen -t ed25519 -f ~/.ssh/lambdalabs -N ""
 scp ~/.ssh/lambdalabs ubuntu@$LAMBDA_IP:~/.ssh/id_ed25519
 scp -r ~/.kaggle ubuntu@$LAMBDA_IP:~

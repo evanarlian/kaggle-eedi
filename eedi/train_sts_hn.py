@@ -116,7 +116,7 @@ def main(args: Args):
                 mis_texts=df_mis["MisconceptionText"].tolist(),
                 mis_ids=df_mis["MisconceptionId"].tolist(),
                 k=100,
-                bs=4,
+                bs=args.per_device_bs,
                 token_pool=args.token_pool,
                 device=ac.device,
                 tqdm=True,
@@ -164,7 +164,7 @@ def main(args: Args):
 
     # 6. make data collator because we use custom dataset
     # this has to be BEFORE instantiating TrainingArguments because somehow the accelerator.device got wiped
-    data_collator = MyCollator(tokenizer, ac.device)
+    data_collator = MyCollator(tokenizer)
 
     # 7. train!
     # TODO check hf docs
@@ -203,12 +203,17 @@ def main(args: Args):
         callbacks=[ihnm_callback],
     )
     trainer.train()
-    trainer.evaluate()  # TODO check on where this landed on wandb
+
+    # 8. evaluate for the last time
+    if ac.is_main_process:  # TODO check if this work or not
+        trainer.evaluate()  # TODO check on where this landed on wandb
 
     # 9. save the trained model
     # TODO test loading the lora model from sentence transformers
-    model.save_pretrained(f"models/{args.run_name}/last")
-    model.push_to_hub(args.run_name, private=True)
+    if ac.is_main_process:  # TODO check is this work or not
+        print("pushing to hub on rank 0")
+        model.save_pretrained(f"models/{args.run_name}/last")
+        model.push_to_hub(args.run_name, private=True)
 
 
 if __name__ == "__main__":

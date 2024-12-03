@@ -225,7 +225,7 @@ class EvalDataset(Dataset):
 
 
 class MyCollator:
-    def __init__(self, tokenizer: PreTrainedTokenizerBase, device: torch.device):
+    def __init__(self, tokenizer: PreTrainedTokenizerBase):
         self.tokenizer = tokenizer
 
     def __call__(self, batch: list[dict]) -> dict:

@@ -70,6 +70,7 @@ class MyTrainer(Trainer):
             "eval/cosine_map@5": map_at_5,
             "eval/cosine_map@1": map_at_1,
         }
+        # cmiiw, below log will only run in rank0, no need to do anything
         self.log(output_metrics)
         rank_distributions = rank_dist(labels, similarities, k=25)
         print("====== RANK DIST =======")
