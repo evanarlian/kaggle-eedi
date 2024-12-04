@@ -216,6 +216,7 @@ def main(args: Args):
         print("pushing to hub on rank 0")
         model.save_pretrained(f"models/{args.run_name}/last")
         model.push_to_hub(args.run_name, private=True)
+        # TODO tokenizer is not pushed to hub??
 
 
 if __name__ == "__main__":
