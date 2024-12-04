@@ -70,14 +70,15 @@ def main(args: Args):
         load_in_4bit=True,
         bnb_4bit_use_double_quant=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,  # this is the q in qlora
+        bnb_4bit_compute_dtype=torch.float16,  # this is the q in qlora
     )
-    model = AutoModel.from_pretrained(
-        args.model, quantization_config=bnb_config, trust_remote_code=True
-    )  # TODO check, this model does not use ac.device anymore
-    # necessary preparation
-    model.gradient_checkpointing_enable()
-    model = prepare_model_for_kbit_training(model)
+    with ac.main_process_first():
+        model = AutoModel.from_pretrained(
+            args.model, quantization_config=bnb_config, trust_remote_code=True
+        )
+    # TODO idk why these 2 below causes error, are these even needed?
+    # model.gradient_checkpointing_enable()
+    # model = prepare_model_for_kbit_training(model)
     tokenizer = AutoTokenizer.from_pretrained(args.model)
 
     # 2. load dataset
@@ -99,7 +100,6 @@ def main(args: Args):
     df_val = df.iloc[val_idx]
     df_val = df_val[~df_val["QuestionAiCreated"]].reset_index(drop=True)
     # cache hard negative mining, this is just for fast dev iteration
-    # TODO this is not really needed anymore because we have hard negative mining on epoch start
     with ac.main_process_first():
         cache = Path(f"hards_{args.model.replace('/', '_')}.json")
         if cache.exists():
@@ -152,8 +152,8 @@ def main(args: Args):
         n_negatives=10,
     )
     eval_dataset = EvalDataset(
-        q_texts=df_train["QuestionComplete"].tolist(),
-        q_mis_ids=df_train["MisconceptionId"].tolist(),
+        q_texts=df_val["QuestionComplete"].tolist(),
+        q_mis_ids=df_val["MisconceptionId"].tolist(),
         mis_texts=orig_mis,
     )
 
@@ -176,12 +176,13 @@ def main(args: Args):
         per_device_train_batch_size=args.per_device_bs,
         per_device_eval_batch_size=args.per_device_bs,
         learning_rate=args.lr,
-        warmup_ratio=0.1,
+        warmup_ratio=0.2,
         fp16=True,  # Set to False if you get an error that your GPU can't run on FP16
         bf16=False,  # Set to True if you have a GPU that supports BF16
         dataloader_drop_last=True,
         dataloader_num_workers=1,  # we are only getting text so it will be fast
         remove_unused_columns=False,  # NOTE: we dont use hf dataset so tell hf not to mess with anything
+        gradient_accumulation_steps=2,
         # Optional tracking/debugging parameters:
         eval_on_start=True,
         eval_strategy="epoch",
@@ -202,6 +203,7 @@ def main(args: Args):
         eval_dataset=eval_dataset,
         callbacks=[ihnm_callback],
     )
+    ac.wait_for_everyone()
     trainer.train()
 
     # 8. evaluate for the last time
