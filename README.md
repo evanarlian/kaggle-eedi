@@ -77,7 +77,7 @@ Open vscode server
 
 Copy .env from local to remote
 
-on lambda again
+on lambda again, after this point, always use tmux from the vm to prevent job being stopped on connection issues
 ```bash
 mkdir -p ~/miniconda3
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
