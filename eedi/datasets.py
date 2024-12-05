@@ -118,6 +118,9 @@ def hn_mine_hf(
         mis_ids (list[int]): Misconception ids.
         k (int): Top k hard misconception ids per question.
         bs (int): Batch size.
+        token_pool (str, {"first", "last"}): Token considered for sentence embedding.
+        device (torch.device): Device.
+        tqdm (bool): Show tqdm bar or not.
 
     Returns:
         list[list[int]]:
