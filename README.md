@@ -50,6 +50,12 @@ MASTERPLAN:
 * solve 'key' keyerror during psuh to hub, make sure only rank0 does that. Tokenizer is not pushed!!!!
 * review all device-related stuffs (done but not checked yet)
 
+# personal note
+* learn to use vast ai, they are so much cheaper, just use the datacenter one if not sure
+* my emb model is shit lol, but fuck it and keep going, use chinese cot borda trick
+* retrain using full data, just trust the train code
+* check vllm conflicts later (requirements.txt)
+
 # lambdalabs
 My personal flow so
 
