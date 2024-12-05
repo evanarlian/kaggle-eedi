@@ -20,9 +20,7 @@ from sklearn.model_selection import GroupShuffleSplit
 from transformers import (
     AutoModel,
     AutoTokenizer,
-    BertModel,
     BitsAndBytesConfig,
-    MistralModel,
     TrainingArguments,
 )
 
@@ -34,6 +32,7 @@ from eedi.datasets import (
     hn_mine_hf,
     make_complete_query,
 )
+from eedi.helpers import get_lora_target_modules
 from eedi.trainer import MyTrainer
 from eedi.utils import wib_now
 
@@ -50,27 +49,15 @@ class Args:
     run_name: str
 
 
-def get_target_modules(model) -> list[str]:
-    if isinstance(model, BertModel):
-        return ["query", "key", "value", "dense"]
-    elif re.search(r"Alibaba-NLP.+NewModel", str(type(model))):
-        return ["qkv_proj", "o_proj", "up_gate_proj", "down_proj"]
-    elif isinstance(model, MistralModel):
-        return ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]  # fmt: off
-    raise ValueError(
-        f"Model with type {type(model)} is unsupported, please manually inspect and add lora modules."
-    )
-
-
 def main(args: Args):
     ac = Accelerator()
 
     # 1. load model with qlora
-    bnb_config = BitsAndBytesConfig(
+    bnb_config = BitsAndBytesConfig(  # this is the q in qlora
         load_in_4bit=True,
         bnb_4bit_use_double_quant=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,  # this is the q in qlora
+        bnb_4bit_compute_dtype=torch.float16,
     )
     with ac.main_process_first():
         model = AutoModel.from_pretrained(
@@ -128,7 +115,7 @@ def main(args: Args):
     # good lora blog: https://magazine.sebastianraschka.com/p/practical-tips-for-finetuning-llms
     if args.lora_rank is not None:
         print("using lora")
-        target_modules = get_target_modules(model)
+        target_modules = get_lora_target_modules(model)
         peft_config = LoraConfig(
             task_type=TaskType.FEATURE_EXTRACTION,
             target_modules=target_modules,
@@ -183,6 +170,10 @@ def main(args: Args):
         dataloader_num_workers=1,  # we are only getting text so it will be fast
         remove_unused_columns=False,  # NOTE: we dont use hf dataset so tell hf not to mess with anything
         gradient_accumulation_steps=2,
+        gradient_checkpointing=True,  # TODO check against gradient_checkpointing_enable()
+        gradient_checkpointing_kwargs={
+            "use_reentrant": False
+        },  # idk, pytorch recommends false
         # Optional tracking/debugging parameters:
         eval_on_start=True,
         eval_strategy="epoch",
@@ -207,16 +198,14 @@ def main(args: Args):
     trainer.train()
 
     # 8. evaluate for the last time
-    if ac.is_main_process:  # TODO check if this work or not
-        trainer.evaluate()  # TODO check on where this landed on wandb
+    if ac.is_main_process:
+        trainer.evaluate()  # TODO check on where this landed on wandb, or everwriting same step?
 
     # 9. save the trained model
-    # TODO test loading the lora model from sentence transformers
-    if ac.is_main_process:  # TODO check is this work or not
+    if ac.is_main_process:
         print("pushing to hub on rank 0")
         model.save_pretrained(f"models/{args.run_name}/last")
         model.push_to_hub(args.run_name, private=True)
-        # TODO tokenizer is not pushed to hub??
 
 
 if __name__ == "__main__":
@@ -225,7 +214,7 @@ if __name__ == "__main__":
         "--paraphrased-path",
         type=Path,
         required=True,
-        help="Path to paraphrased dataset.",
+        help="Path to paraphrased dataset",
     )
     parser.add_argument(
         "--model",

@@ -1,10 +1,28 @@
+import re
 from typing import Literal, Optional
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 from tqdm.auto import tqdm
-from transformers import PreTrainedModel, PreTrainedTokenizerBase
+from transformers import (
+    BertModel,
+    MistralModel,
+    PreTrainedModel,
+    PreTrainedTokenizerBase,
+)
+
+
+def get_lora_target_modules(model) -> list[str]:
+    if isinstance(model, BertModel):
+        return ["query", "key", "value", "dense"]
+    elif re.search(r"Alibaba-NLP.+NewModel", str(type(model))):
+        return ["qkv_proj", "o_proj", "up_gate_proj", "down_proj"]
+    elif isinstance(model, MistralModel):
+        return ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]  # fmt: off
+    raise ValueError(
+        f"Model with type {type(model)} is unsupported, please manually inspect and add lora modules."
+    )
 
 
 def last_token_pool(last_hidden_states: Tensor, attention_mask: Tensor) -> Tensor:
