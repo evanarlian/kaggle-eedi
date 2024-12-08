@@ -42,19 +42,27 @@ MASTERPLAN:
 
 
 # todo
+* learn to use vast ai, they are so much cheaper, just use the datacenter one if not sure (in later comps)
 * wandb log args only log on rank 0. Log global batch size
 * how to do eval only on rank 0 deepspeed?
 * use grad accumulation for larger models
-* try deepspeed offloading (cpu) to see the memory difference
+* try deepspeed offloading (cpu) to see the memory difference. Try not to bc this is slow.
 * is there a way to avoid stateful config? (accelerate config is stateful and i prefer the explicit way)
-* solve 'key' keyerror during psuh to hub, make sure only rank0 does that. Tokenizer is not pushed!!!!
-* review all device-related stuffs (done but not checked yet)
+* clean up code (DOING)
+* remove tmux out!!!!!!!!!
+* rerank
+  * Chinese borda count
+  * dspy on awq vllm (i think this is fine since vllm has openai api)
+  * soft borda count
+* retrieval
+  * retrain 4 1.5 B Qwens
+  * different everything (seed, lr, optim, loss func, lora, grouped cv splits, synthetic usage, hn mining stuffs)
+  * concat embed later
+  * this is ensembling, concat embedding
+* Notion note about kaggle Dataset speed vs notebook output
+* Find more creative way to do test time compute
+* More high quality synthetic dataset
 
-# personal note
-* learn to use vast ai, they are so much cheaper, just use the datacenter one if not sure
-* my emb model is shit lol, but fuck it and keep going, use chinese cot borda trick
-* retrain using full data, just trust the train code
-* check vllm conflicts later (requirements.txt)
 
 # lambdalabs
 My personal flow so
