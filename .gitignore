@@ -1,4 +1,6 @@
 submission.csv
+top25_miscons.json
+hards_*.json
 data/
 models/
 wandb/
