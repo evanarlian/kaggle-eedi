@@ -48,8 +48,6 @@ MASTERPLAN:
 * use grad accumulation for larger models
 * try deepspeed offloading (cpu) to see the memory difference. Try not to bc this is slow.
 * is there a way to avoid stateful config? (accelerate config is stateful and i prefer the explicit way)
-* clean up code (DOING)
-* remove tmux out!!!!!!!!!
 * rerank
   * Chinese borda count
   * dspy on awq vllm (i think this is fine since vllm has openai api)
@@ -75,6 +73,7 @@ LAMBDA_IP=...
 ssh-keygen -t ed25519 -f ~/.ssh/lambdalabs -N ""
 scp ~/.ssh/lambdalabs ubuntu@$LAMBDA_IP:~/.ssh/id_ed25519
 scp -r ~/.kaggle ubuntu@$LAMBDA_IP:~
+scp ~/.tmux.conf ubuntu@$LAMBDA_IP:~
 ```
 
 On lambda
