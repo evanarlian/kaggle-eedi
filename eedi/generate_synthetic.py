@@ -4,6 +4,7 @@ import logging
 import os
 import random
 from argparse import ArgumentParser
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,8 @@ from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm as atqdm
+
+from eedi.datasets import make_complete_query, make_nice_df
 
 load_dotenv()
 logging.basicConfig(level=logging.WARNING)
@@ -27,69 +30,58 @@ class Args:
     dataset_dir: Path
 
 
-class Answers(BaseModel):
-    a: str
-    b: str
-    c: str
-    d: str
-
-
-class Misconceptions(BaseModel):
-    a: str
-    b: str
-    c: str
-    d: str
-
-
-class MathQuestion(BaseModel):
-    subject: str
-    construct_name: str  # can't use `construct` because it shadows pydantic internals
+class Generated(BaseModel):
     question: str
-    answers: Answers
-    misconceptions: Misconceptions
+    correct_answer: str
+    wrong_answer: str
 
 
-class MathQuestionList(BaseModel):
-    math_questions: list[MathQuestion]
+class GeneratedList(BaseModel):
+    generated_list: list[Generated]
 
 
-def merge_with_misconceptions(
-    df_train: pd.DataFrame, df_mis: pd.DataFrame
-) -> pd.DataFrame:
-    mis_dict = df_mis["MisconceptionName"].to_dict()
-    df_merged = df_train.copy()
-    for letter in "ABCD":
-        df_merged[f"Misconception{letter}Name"] = df_merged[
-            f"Misconception{letter}Id"
-        ].apply(lambda x: None if np.isnan(x) else mis_dict[int(x)])
-    return df_merged
+class Datapoint(BaseModel):
+    subject_name: str
+    construct_name: str
+    question: str
+    correct_answer: str
+    wrong_answer: str
+    misconception_name: str
 
 
-async def gen_synthetic_for_one_q(
-    row: pd.Series, client: AsyncOpenAI, max_retries: int = 5
-) -> MathQuestionList:
+async def gen_synthetic_for_miscon(
+    row: pd.Series, mis_text: str, client: AsyncOpenAI, max_retries: int = 5
+) -> list[Datapoint]:
     async with semaphore:
         for retry in range(max_retries):
             try:
-                system_prompt = "You are a mathematics teacher tasked to create questions to assess the student's understanding of math concepts. You will be presented with one example: the math question, 1 correct and 3 distraction answers, along with the math misconceptions that led students choosing the distractors instead. Your task is to create similar, but diverse set of 10 new questions. Stick to the given math subject, but feel free to change the construct_name. Remember, each set must contain exactly one '- (answer X is correct, no misconception)'. Return the answer in json."
-                prompt = f"""
+                system_prompt = "You are a mathematics teacher tasked to create questions to assess the student's understanding of math concepts. You will be presented with one example: the math question, the correct and wrong answer, along with the math misconceptions that led students choosing wrong answer instead of the correct one. Your task is to create similar, but diverse set of new questions, correct and wrong answers according to the given subject, construct, and misconception. Make sure the generated contents are diverse enough. Generate 5 set. Output answer in json."
+                prompt = f"""# One-shot example:
 subject: {row['SubjectName']}
 
-construct_name: {row['ConstructName']}
+construct: {row['ConstructName']}
 
 question: {row['QuestionText']}
 
-answers:
-a. {row['AnswerAText']}
-b. {row['AnswerBText']}
-c. {row['AnswerCText']}
-d. {row['AnswerDText']}
+correct_answer: {row['CorrectText']}
 
-misconceptions:
-a. {row['MisconceptionAName'] or '- (answer a is correct, no misconception)'}
-b. {row['MisconceptionBName'] or '- (answer b is correct, no misconception)'}
-c. {row['MisconceptionCName'] or '- (answer c is correct, no misconception)'}
-d. {row['MisconceptionDName'] or '- (answer d is correct, no misconception)'}
+wrong_answer: {row['WrongText']}
+
+misconception: {mis_text}
+
+
+# Create new questions based on given example
+subject: {row['SubjectName']}
+
+construct: {row['ConstructName']}
+
+question: ...
+
+correct_answer: ...
+
+wrong_answer: ...
+
+misconception: {mis_text}
 """
                 completion = await client.beta.chat.completions.parse(
                     model="gpt-4o",
@@ -97,66 +89,89 @@ d. {row['MisconceptionDName'] or '- (answer d is correct, no misconception)'}
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt},
                     ],
-                    response_format=MathQuestionList,
+                    response_format=GeneratedList,
                 )
-                synthetic_questions = completion.choices[0].message.parsed
-                if synthetic_questions is None:
-                    raise ValueError("synthetic is None")
+                generated_list = completion.choices[0].message.parsed
+                if generated_list is None:
+                    raise ValueError("generated_list is None")
             except Exception as e:
                 logger.error(f"Error on attempt {retry}: {e}")
                 await asyncio.sleep(2**retry)  # exponential backoff
             else:
-                return synthetic_questions
+                return [
+                    Datapoint(
+                        subject_name=row["SubjectName"],
+                        construct_name=row["ConstructName"],
+                        question=gen.question,
+                        correct_answer=gen.correct_answer,
+                        wrong_answer=gen.wrong_answer,
+                        misconception_name=mis_text,
+                    )
+                    for gen in generated_list.generated_list
+                ]
         raise RuntimeError(f"Failed after {max_retries} retries.")
 
 
-async def gen_synthetic(df_merged: pd.DataFrame, savepath: Path):
-    client = AsyncOpenAI()
-    synthetic_2d: list[MathQuestionList] = await atqdm.gather(
-        *[gen_synthetic_for_one_q(row, client) for _, row in df_merged.iterrows()]
+async def gen_synthetic(
+    df_train: pd.DataFrame, orig_mis: list[str], n_generate: int, savepath: Path
+):
+    # using inverse sampling from train in order to balance which misconception to pick
+    mis_id_to_train_idx = defaultdict(list)
+    for train_idx, mis_id in enumerate(df_train["MisconceptionId"]):
+        mis_id_to_train_idx[mis_id].append(train_idx)
+    mis_id_to_count = {k: len(v) for k, v in mis_id_to_train_idx.items()}
+    count_arr = np.array(list(mis_id_to_count.values()))
+    inv_prob = 1 / count_arr
+    inv_prob = inv_prob / inv_prob.sum()
+    to_generate = np.random.choice(
+        np.array(list(mis_id_to_count.keys())),
+        size=n_generate,
+        replace=True,
+        p=inv_prob,
     )
-    d: list[MathQuestion] = []
-    for row in synthetic_2d:
-        d += row.math_questions
+    # generate
+    client = AsyncOpenAI()
+    tasks = []
+    for mis_id in to_generate:
+        row_idx = random.choice(mis_id_to_train_idx[mis_id])
+        row = df_train.loc[row_idx]
+        mis_text = orig_mis[row["MisconceptionId"]]
+        tasks.append(gen_synthetic_for_miscon(row, mis_text, client))
+
+    datapoint_2d: list[list[Datapoint]] = await atqdm.gather(*tasks)
+    d = [
+        datapoint.model_dump()
+        for datapoints in datapoint_2d
+        for datapoint in datapoints
+    ]
     with open(savepath, "w") as f:
-        json.dump([dd.model_dump() for dd in d], f)
+        json.dump(d, f)
 
 
 async def main(args: Args):
     # load dataset
     df_train = pd.read_csv(args.dataset_dir / "train.csv")
+    df_train = make_nice_df(df_train)
     df_mis = pd.read_csv(args.dataset_dir / "misconception_mapping.csv")
-    df_merged = merge_with_misconceptions(df_train, df_mis)
-
-    # filter only the perfect dataset (a question must be accompanied with 3 misconceptions and 1 correct (nan miscon))
-    criteria = (
-        df_merged[
-            [
-                "MisconceptionAId",
-                "MisconceptionBId",
-                "MisconceptionCId",
-                "MisconceptionDId",
-            ]
-        ]
-        .notna()
-        .sum(axis=1)
-        == 3
-    )
-    df_merged = df_merged[criteria].reset_index(drop=True).head(4)
+    orig_mis = df_mis["MisconceptionName"].tolist()
 
     folder = args.dataset_dir / "synthetic"
     folder.mkdir(parents=True, exist_ok=True)
     synthetic_cache = folder / "synthetic.json"
 
-    # generate synthetic!
+    # generate synthetic data from known example in train
     if not synthetic_cache.exists():
-        logger.info("creating synthetic questions")
-        await gen_synthetic(df_merged, synthetic_cache)
+        logger.info("generating questions")
+        await gen_synthetic(
+            df_train, orig_mis, n_generate=len(df_train), savepath=synthetic_cache
+        )
     else:
-        logger.info("synthetic cache exists, skipping")
+        logger.info("generation cache exists, skipping")
 
-    # rebuild everything as id this is the original dataset
-    # dont forget to add column
+    # generate syntheticc data from misconception ids NOT in the train dataset
+    # TODO
+    # rebuild everything as if this is the original dataset
+    # dont forget to add column (ai created or whatever)
 
 
 if __name__ == "__main__":
