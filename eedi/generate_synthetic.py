@@ -223,8 +223,6 @@ Make sure the generated contents are diverse enough. Generate 5 sets. Output ans
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt},
                     ],
-                    # temperature=0.7,
-                    # top_p=0.7,
                     response_format=GeneratedUnknownList,
                 )
                 generated_list = completion.choices[0].message.parsed
@@ -275,6 +273,89 @@ async def gen_unknown_synthetic(
         json.dump(d, f)
 
 
+def rebuild(
+    df_train: pd.DataFrame,
+    orig_mis: list[str],
+    synthetic_known_cache: Path,
+    synthetic_unknown_cache: Path,
+    savepath: Path,
+) -> None:
+    with open(synthetic_known_cache, "r") as f:
+        synthetic_known = json.load(f)
+    with open(synthetic_unknown_cache, "r") as f:
+        synthetic_unknown = json.load(f)
+
+    subject_to_subject_id = {}
+    for i, s_name, s_id in df_train[["SubjectName", "SubjectId"]].itertuples():
+        subject_to_subject_id[s_name] = s_id
+    construct_to_construct_id = {}
+    for i, c_name, c_id in df_train[["ConstructName", "ConstructId"]].itertuples():
+        construct_to_construct_id[c_name] = c_id
+    question_to_question_id = {}
+    for i, q_text, q_id in df_train[["QuestionText", "QuestionId"]].itertuples():
+        question_to_question_id[q_text] = q_id
+    mis_to_mis_id = {mis_text: mis_id for mis_id, mis_text in enumerate(orig_mis)}
+
+    new_train_rows = []
+    for known in synthetic_known:
+        new_q = known["question"]
+        # NOTE: this is bad slow code but i dont care
+        if new_q not in question_to_question_id:
+            question_to_question_id[new_q] = max(question_to_question_id.values()) + 1
+        new_train_rows.append(
+            {
+                "QuestionId": question_to_question_id[new_q],
+                "ConstructId": construct_to_construct_id[known["construct_name"]],
+                "ConstructName": known["construct_name"],
+                "SubjectId": subject_to_subject_id[known["subject_name"]],
+                "SubjectName": known["subject_name"],
+                "CorrectChoice": "?",
+                "CorrectText": known["correct_answer"],
+                "QuestionText": new_q,
+                "WrongChoice": "?",
+                "WrongText": known["wrong_answer"],
+                "MisconceptionId": mis_to_mis_id[known["misconception_name"]],
+                "QuestionId_Answer": "?",
+                "Synthetic": True,
+            }
+        )
+    for unknown in synthetic_unknown:
+        # NOTE: these are bad slow code but i dont care
+        new_subj = unknown["subject_name"]
+        new_c = unknown["construct_name"]
+        new_q = unknown["question"]
+        if new_subj not in subject_to_subject_id:
+            subject_to_subject_id[new_subj] = max(subject_to_subject_id.values()) + 1
+        if new_c not in construct_to_construct_id:
+            construct_to_construct_id[new_c] = (
+                max(construct_to_construct_id.values()) + 1
+            )
+        if new_q not in question_to_question_id:
+            question_to_question_id[new_q] = max(question_to_question_id.values()) + 1
+        new_train_rows.append(
+            {
+                "QuestionId": question_to_question_id[new_q],
+                "ConstructId": construct_to_construct_id[new_c],
+                "ConstructName": new_c,
+                "SubjectId": subject_to_subject_id[new_subj],
+                "SubjectName": new_subj,
+                "CorrectChoice": "?",
+                "CorrectText": unknown["correct_answer"],
+                "QuestionText": new_q,
+                "WrongChoice": "?",
+                "WrongText": unknown["wrong_answer"],
+                "MisconceptionId": mis_to_mis_id[unknown["misconception_name"]],
+                "QuestionId_Answer": "?",
+                "Synthetic": True,
+            }
+        )
+
+    df_train_new = pd.DataFrame.from_records(new_train_rows)
+    df_train_all = pd.concat([df_train, df_train_new]).reset_index(drop=True)
+    df_train_all.to_csv(savepath, index=False)
+    logger.info(f"saved usable synthetic dataframe in {savepath}")
+
+
 async def main(args: Args):
     # load dataset
     df_train = pd.read_csv(args.dataset_dir / "train.csv")
@@ -305,9 +386,14 @@ async def main(args: Args):
     else:
         logger.info("cache of unknown generation exists, skipping")
 
-    # TODO
-    # rebuild everything as if this is the original dataset
-    # dont forget to add column (ai created or whatever)
+    # rebuild everything as if this is the original dataset, also add synthetic indicator
+    rebuild(
+        df_train,
+        orig_mis,
+        synthetic_known_cache,
+        synthetic_unknown_cache,
+        savepath=folder / "train.csv",
+    )
 
 
 if __name__ == "__main__":
