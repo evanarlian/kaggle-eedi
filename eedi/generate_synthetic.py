@@ -280,6 +280,9 @@ def rebuild(
     synthetic_unknown_cache: Path,
     savepath: Path,
 ) -> None:
+    # mark original dataset as not synthetic
+    df_train["Synthetic"] = False
+
     with open(synthetic_known_cache, "r") as f:
         synthetic_known = json.load(f)
     with open(synthetic_unknown_cache, "r") as f:
