@@ -21,10 +21,10 @@ from eedi.helpers import batched_inference
 
 
 @dataclass
-class Args:
+class Args: 
     dataset_dir: Path
-    model_path: Path
-    lora_path: Path
+    model_path: str
+    lora_path: str
     token_pool: Literal["first", "last"]
 
 
