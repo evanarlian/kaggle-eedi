@@ -1,14 +1,12 @@
 import asyncio
 import json
 import logging
-import os
 import random
 from argparse import ArgumentParser
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-import IPython.display as ipd
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
@@ -16,7 +14,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm as atqdm
 
-from eedi.datasets import make_complete_query, make_nice_df
+from eedi.datasets import make_nice_df
 
 load_dotenv()
 logging.basicConfig(level=logging.WARNING)
@@ -30,14 +28,26 @@ class Args:
     dataset_dir: Path
 
 
-class Generated(BaseModel):
+class GeneratedKnown(BaseModel):
     question: str
     correct_answer: str
     wrong_answer: str
 
 
-class GeneratedList(BaseModel):
-    generated_list: list[Generated]
+class GeneratedKnownList(BaseModel):
+    generated_list: list[GeneratedKnown]
+
+
+class GeneratedUnknown(BaseModel):
+    subject_name: str
+    construct_name: str
+    question: str
+    correct_answer: str
+    wrong_answer: str
+
+
+class GeneratedUnknownList(BaseModel):
+    generated_list: list[GeneratedUnknown]
 
 
 class Datapoint(BaseModel):
@@ -91,7 +101,7 @@ misconception: {mis_text}
                     ],
                     temperature=0.7,
                     top_p=0.7,
-                    response_format=GeneratedList,
+                    response_format=GeneratedKnownList,
                 )
                 generated_list = completion.choices[0].message.parsed
                 if generated_list is None:
@@ -150,32 +160,48 @@ async def gen_known_synthetic(
         json.dump(d, f)
 
 
-
 async def gen_unknown_synthetic_impl(
-    row: pd.Series, mis_text: str, client: AsyncOpenAI
+    mis_text: str, client: AsyncOpenAI
 ) -> list[Datapoint]:
     async with semaphore:
         for retry in range(1000):
             try:
-                system_prompt = "You are a mathematics teacher tasked to create questions to assess the student's understanding of math concepts. You will be presented with one example: the math question, the correct and wrong answer, along with the math misconceptions that led students choosing wrong answer instead of the correct one. Your task is to create similar, but diverse set of new questions, correct and wrong answers according to the given subject, construct, and misconception. Make sure the generated contents are diverse enough. Generate 5 sets. Output answer in json."
-                prompt = f"""# One-shot example:
-subject: {row['SubjectName']}
+                system_prompt = "You are a mathematics teacher tasked to create questions to assess the student's understanding of math concepts."
+                prompt = f"""# Few-shot example 1
+subject: Completing the Square
 
-construct: {row['ConstructName']}
+construct: Complete the square for expressions that end up in the form (x + a)² + b
 
-question: {row['QuestionText']}
+question: When Sarah completes the square, what should replace the triangle?
+\\[
+p^{2}-10 p-1 \\equiv(p-5)^{2}  \\Delta
+\\]
 
-correct_answer: {row['CorrectText']}
+correct_answer: \\( \\Delta=-26 \\)
 
-wrong_answer: {row['WrongText']}
+wrong_answer: \\( \\Delta=+24 \\)
 
-misconception: {mis_text}
+misconception: When completing the square in the form (x - a)^2 + b, believes b = a^2 + the original constant
 
 
-# Create new questions based on given example
-subject: {row['SubjectName']}
+# Few-shot example 2
+subject: Square Roots, Cube Roots, etc
 
-construct: {row['ConstructName']}
+construct: Recognise square roots
+
+question: Which of the following is the square root of \\( 81 \\) ?
+
+correct_answer: \\( 9 \\)
+
+wrong_answer: \\( 3 \\)
+
+misconception: Mixes up square rooting and fourth rooting
+
+
+# Your task
+subject_name: ...
+
+construct_name: ...
 
 question: ...
 
@@ -184,6 +210,12 @@ correct_answer: ...
 wrong_answer: ...
 
 misconception: {mis_text}
+
+
+For context, these questions are designed to test student math understanding. They might have some misconceptions, which led them to select incorrect answer.
+Similar to 2 few-shot examples above, given misconception, your task is to generate these 5 things: subject_name, construct_name, question, correct_answer, and wrong_answer.
+Feel free to choose the math subject_name and construct_name suitable for high school students. Pay attention to the misconception, your generations should be relatable to the said misconception.
+Make sure the generated contents are diverse enough. Generate 5 sets. Output answer in json.
 """
                 completion = await client.beta.chat.completions.parse(
                     model="gpt-4o",
@@ -191,9 +223,9 @@ misconception: {mis_text}
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=0.7,
-                    top_p=0.7,
-                    response_format=GeneratedList,
+                    # temperature=0.7,
+                    # top_p=0.7,
+                    response_format=GeneratedUnknownList,
                 )
                 generated_list = completion.choices[0].message.parsed
                 if generated_list is None:
@@ -204,8 +236,8 @@ misconception: {mis_text}
             else:
                 return [
                     Datapoint(
-                        subject_name=row["SubjectName"],
-                        construct_name=row["ConstructName"],
+                        subject_name=gen.subject_name,
+                        construct_name=gen.construct_name,
                         question=gen.question,
                         correct_answer=gen.correct_answer,
                         wrong_answer=gen.wrong_answer,
@@ -217,31 +249,22 @@ misconception: {mis_text}
 
 
 async def gen_unknown_synthetic(
-    df_train: pd.DataFrame, orig_mis: list[str], n_generate: int, savepath: Path
+    df_train: pd.DataFrame, orig_mis: list[str], savepath: Path
 ):
-    # using inverse sampling from train in order to balance which misconception to pick
-    mis_id_to_train_idx = defaultdict(list)
-    for train_idx, mis_id in enumerate(df_train["MisconceptionId"]):
-        mis_id_to_train_idx[mis_id].append(train_idx)
-    mis_id_to_count = {k: len(v) for k, v in mis_id_to_train_idx.items()}
-    count_arr = np.array(list(mis_id_to_count.values()))
-    inv_prob = 1 / count_arr
-    inv_prob = inv_prob / inv_prob.sum()
-    to_generate = np.random.choice(
-        np.array(list(mis_id_to_count.keys())),
-        size=n_generate,
-        replace=True,
-        p=inv_prob,
-    )
+    # find the misconceptions not present in train dataset
+    mis_in_train = set(df_train["MisconceptionId"])
+    all_mis = set(list(range(len(orig_mis))))
+    not_in_train = all_mis - mis_in_train
     # generate
     client = AsyncOpenAI()
     tasks = []
-    for mis_id in to_generate:
-        row_idx = random.choice(mis_id_to_train_idx[mis_id])
-        row = df_train.loc[row_idx]
-        mis_text = orig_mis[row["MisconceptionId"]]
-        tasks.append(gen_known_synthetic_impl(row, mis_text, client))
-
+    for mis_id in not_in_train:
+        mis_text = orig_mis[mis_id]
+        # it has been calculated that we need to call this 2.7 times in order to roughly match the known case
+        # 4370 samples in train / 1604 misconceptions in train ~ 2.7 samples per misconception
+        # i just choose 2 because it is cheaper to run, we can't reliably predict the unknown case anyway
+        tasks.append(gen_unknown_synthetic_impl(mis_text, client))
+        tasks.append(gen_unknown_synthetic_impl(mis_text, client))
     datapoint_2d: list[list[Datapoint]] = await atqdm.gather(*tasks)
     d = [
         datapoint.model_dump()
@@ -263,26 +286,25 @@ async def main(args: Args):
     folder.mkdir(parents=True, exist_ok=True)
     synthetic_known_cache = folder / "synthetic_known.json"
     synthetic_unknown_cache = folder / "synthetic_unknown.json"
-    
+
     # generate synthetic data from known example in train
     if not synthetic_known_cache.exists():
-        logger.info("generating questions")
+        logger.info("generating known questions")
         await gen_known_synthetic(
             df_train, orig_mis, n_generate=len(df_train), savepath=synthetic_known_cache
         )
     else:
-        logger.info("generation cache exists, skipping")
+        logger.info("cache of known generation exists, skipping")
 
     # generate synthetic data with misconception not included in train
     if not synthetic_unknown_cache.exists():
-        logger.info("generating questions")
-        # await gen_synthetic(
-        #     df_train, orig_mis, n_generate=len(df_train), savepath=synthetic_known_cache
-        # )
+        logger.info("generating unknown questions")
+        await gen_unknown_synthetic(
+            df_train, orig_mis, savepath=synthetic_unknown_cache
+        )
     else:
-        logger.info("generation cache exists, skipping")
+        logger.info("cache of unknown generation exists, skipping")
 
-    # generate syntheticc data from misconception ids NOT in the train dataset
     # TODO
     # rebuild everything as if this is the original dataset
     # dont forget to add column (ai created or whatever)
