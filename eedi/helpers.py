@@ -10,6 +10,7 @@ from transformers import (
     MistralModel,
     PreTrainedModel,
     PreTrainedTokenizerBase,
+    Qwen2Model,
 )
 
 
@@ -19,6 +20,8 @@ def get_lora_target_modules(model) -> list[str]:
     elif re.search(r"Alibaba-NLP.+NewModel", str(type(model))):
         return ["qkv_proj", "o_proj", "up_gate_proj", "down_proj"]
     elif isinstance(model, MistralModel):
+        return ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]  # fmt: off
+    elif isinstance(model, Qwen2Model):
         return ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]  # fmt: off
     raise ValueError(
         f"Model with type {type(model)} is unsupported, please manually inspect and add lora modules."

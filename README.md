@@ -103,16 +103,12 @@ On lambda
 ```bash
 git clone git@github.com:evanarlian/kaggle-eedi.git
 cd kaggle-eedi
-# manually fill .env first
+# open vscode remote, super slick
+# manually fill .env first, or copy from local machine
 export $(cat .env | xargs)
-cp ./scripts/.tmux.conf ~/
 ```
 
-Open vscode server
-
-Copy .env from local to remote
-
-on lambda again, after this point, always use tmux from the vm to prevent job being stopped on connection issues
+on lmabda
 ```bash
 mkdir -p ~/miniconda3
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
@@ -122,6 +118,7 @@ source ~/miniconda3/bin/activate
 conda init --all
 ```
 
+on lambda again, after this point, always use tmux from the vm to prevent job being stopped on connection issues
 ```bash
 conda create -n kaggle_eedi python=3.11 -y
 conda activate kaggle_eedi
@@ -130,6 +127,7 @@ pip install -e .
 
 ```bash
 accelerate config
+ln -s ~/.cache/huggingface/accelerate/default_config.yaml .
 ```
 
 logins
