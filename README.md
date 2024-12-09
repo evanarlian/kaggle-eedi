@@ -57,14 +57,16 @@ MASTERPLAN:
 
 # todo
 * learn to use vast ai, they are so much cheaper, just use the datacenter one if not sure (in later comps)
+* try saving each models (after eval) to huggingface, just for safeguard in case of overfitting
 * wandb log args only log on rank 0. Log global batch size
 * how to do eval only on rank 0 deepspeed?
 * use grad accumulation for larger models
 * try deepspeed offloading (cpu) to see the memory difference. Try not to bc this is slow.
 * is there a way to avoid stateful config? (accelerate config is stateful and i prefer the explicit way)
 * rerank
+  * prompt qwen32B to just output 1,2,3..,9 This is important because the model MUST know it should output letters right away
   * Chinese borda count
-  * dspy on awq vllm (i think this is fine since vllm has openai api)
+  * dspy on awq vllm (i think this is fine since vllm has openai api), i think i need to rent lambda again to optimize dspy
   * soft borda count
 * retrieval
   * retrain 4 1.5 B Qwens
