@@ -14,14 +14,16 @@ trap notify_failure ERR
 
 # Main script logic
 accelerate launch eedi/train_sts_hn.py \
-    --paraphrased-path=data/eedi-paraphrased \
-    --model=Salesforce/SFR-Embedding-2_R \
+    --synthetic-path=data/eedi-synthetic \
+    --use-synthetic \
+    --model=sentence-transformers/all-MiniLM-L6-v2 \
     --token-pool=last \
     --per-device-bs=8 \
     --lr=2e-4 \
     --n-epochs=5 \
     --lora-rank=16 \
-    --run-name=sfr-lambda-8-a100
+    --dataset-seed=1 \
+    --run-name=synthetic-test
 
 # If training succeeds, send success notification
 notify_success

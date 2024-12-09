@@ -180,7 +180,8 @@ class TrainDataset(Dataset):
         self.mis_ids = mis_ids
         self.hards = hards
         self.n_negatives = n_negatives
-        # create reverse mapping
+        # create reverse mapping, suitable for paraphrased dataset where single
+        # misconception id has multiple different alternatives
         self.mis_id_to_mis_idx = defaultdict(list)
         for i, mis_id in enumerate(mis_ids):
             self.mis_id_to_mis_idx[mis_id].append(i)
@@ -225,6 +226,9 @@ class EvalDataset(Dataset):
             "anchor": self.q_texts[i],
             "pos": self.mis_texts[self.q_mis_ids[i]],
         }
+
+
+# TODO rethink about the new synthetic data, dont use the paraphrased data
 
 
 class MyCollator:

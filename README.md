@@ -68,7 +68,15 @@ MASTERPLAN:
   * soft borda count
 * retrieval
   * retrain 4 1.5 B Qwens
-  * different everything (seed, lr, optim, loss func, lora, grouped cv splits, synthetic usage, hn mining stuffs)
+  * different everything
+    * (done) seed
+    * (done) lr
+    * optim
+    * loss func
+    * (done) lora
+    * (done) grouped cv splits
+    * (done) synthetic usage
+    * hn mining stuffs
   * concat embed later
   * this is ensembling, concat embedding
 * Notion note about kaggle Dataset speed vs notebook output

@@ -1,6 +1,5 @@
 import json
 import os
-import re
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from html import parser
@@ -39,13 +38,15 @@ from eedi.utils import wib_now
 
 @dataclass
 class Args:
-    paraphrased_path: Path
+    synthetic_path: Path
+    use_synthetic: bool
     model: str
     token_pool: Literal["first", "last"]
     per_device_bs: int
     lr: float
     n_epochs: int
     lora_rank: Optional[int]
+    dataset_seed: int
     run_name: str
 
 
@@ -57,7 +58,7 @@ def main(args: Args):
         load_in_4bit=True,
         bnb_4bit_use_double_quant=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_compute_dtype=torch.bfloat16,
     )
     with ac.main_process_first():
         model = AutoModel.from_pretrained(
@@ -69,19 +70,19 @@ def main(args: Args):
     tokenizer = AutoTokenizer.from_pretrained(args.model)
 
     # 2. load dataset
-    # load paraphrased misconception
-    df_mis = pd.read_csv(args.paraphrased_path / "misconception_mapping.csv")
+    # load misconception
+    df_mis = pd.read_csv(args.synthetic_path / "misconception_mapping.csv")
     orig_mis = (
-        df_mis[~df_mis["MisconceptionAiCreated"]]
+        df_mis[~df_mis["Synthetic"]]
         .sort_values("MisconceptionId")["MisconceptionText"]
         .tolist()
     )
     assert len(orig_mis) == 2587
-    # load paraphrased train
-    df = pd.read_csv(args.paraphrased_path / "train.csv")
+    # load synthetic train
+    df = pd.read_csv(args.synthetic_path / "train.csv")
     df["QuestionComplete"] = df.apply(make_complete_query, axis=1)
     # split to train (w/ miscons) and val (w/o miscons)
-    gss = GroupShuffleSplit(n_splits=1, train_size=0.7, random_state=42)
+    gss = GroupShuffleSplit(n_splits=1, train_size=0.7, random_state=args.dataset_seed)
     train_idx, val_idx = next(gss.split(df, groups=df["QuestionId"]))
     df_train = df.iloc[train_idx].reset_index(drop=True)
     df_val = df.iloc[val_idx]
@@ -164,8 +165,8 @@ def main(args: Args):
         per_device_eval_batch_size=args.per_device_bs,
         learning_rate=args.lr,
         warmup_ratio=0.2,
-        fp16=True,  # Set to False if you get an error that your GPU can't run on FP16
-        bf16=False,  # Set to True if you have a GPU that supports BF16
+        fp16=False,  # Set to False if you get an error that your GPU can't run on FP16
+        bf16=True,  # Set to True if you have a GPU that supports BF16
         dataloader_drop_last=True,
         dataloader_num_workers=1,  # we are only getting text so it will be fast
         remove_unused_columns=False,  # NOTE: we dont use hf dataset so tell hf not to mess with anything
@@ -211,10 +212,13 @@ def main(args: Args):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument(
-        "--paraphrased-path",
-        type=Path,
-        required=True,
-        help="Path to paraphrased dataset",
+        "--synthetic-path", type=Path, required=True, help="Path to paraphrased dataset"
+    )
+    parser.add_argument(
+        "--use-synthetic",
+        type=bool,
+        action="store_true",
+        help="Whether to use synthetic data or not",
     )
     parser.add_argument(
         "--model",
@@ -244,6 +248,12 @@ if __name__ == "__main__":
         type=int,
         required=False,
         help="LoRA rank. Good baseline is 8, try to keep doubling this value",
+    )
+    parser.add_argument(
+        "--dataset-seed",
+        type=int,
+        required=True,
+        help="Seed to control ONLY dataset splitting",
     )
     parser.add_argument(
         "--run-name",
