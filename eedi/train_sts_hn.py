@@ -78,6 +78,8 @@ def main(args: Args):
     assert len(orig_mis) == 2587
     # load synthetic train
     df = pd.read_csv(args.synthetic_path / "train.csv")
+    if not args.use_synthetic:
+        df = df[~df["Synthetic"]].reset_index(drop=True)
     df["QuestionComplete"] = df.apply(make_complete_query, axis=1)
     # split to train (w/ miscons) and val (w/o miscons)
     gss = GroupShuffleSplit(n_splits=1, train_size=0.7, random_state=args.dataset_seed)
@@ -170,7 +172,7 @@ def main(args: Args):
         dataloader_drop_last=True,
         dataloader_num_workers=1,  # we are only getting text so it will be fast
         remove_unused_columns=False,  # NOTE: we dont use hf dataset so tell hf not to mess with anything
-        gradient_accumulation_steps=2,
+        # gradient_accumulation_steps=2,
         gradient_checkpointing=True,  # TODO check against gradient_checkpointing_enable()
         gradient_checkpointing_kwargs={
             "use_reentrant": False
