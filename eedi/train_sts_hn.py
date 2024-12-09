@@ -80,14 +80,16 @@ def main(args: Args):
     df = pd.read_csv(args.synthetic_path / "train.csv")
     df["QuestionComplete"] = df.apply(make_complete_query, axis=1)
     # split to train (w/ miscons) and val (w/o miscons)
-    gss = GroupShuffleSplit(n_splits=1, train_size=0.7)
+    gss = GroupShuffleSplit(n_splits=1, train_size=0.7, random_state=args.dataset_seed)
     train_idx, val_idx = next(gss.split(df, groups=df["QuestionId"]))
     df_train = df.iloc[train_idx].reset_index(drop=True)
     df_val = df.iloc[val_idx]
     df_val = df_val[~df_val["Synthetic"]].reset_index(drop=True)
     # cache hard negative mining, this is just for fast dev iteration
     with ac.main_process_first():
-        cache = Path(f"hards_{args.model.replace('/', '_')}.json")
+        cache = Path(
+            f"hards_{args.model.replace('/', '_')}_seed_{args.dataset_seed}.json"
+        )
         if cache.exists():
             print("loading from cache")
             with open(cache, "r") as f:
