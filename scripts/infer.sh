@@ -4,9 +4,9 @@ set -Eeuxo pipefail
 echo "RETRIEVE..."
 python eedi/infer_top25.py \
     --dataset-dir=data \
-    --model-path=models/model_orig \
-    --lora-path=models/model_lora \
-    --token-pool=first
+    --model-paths models/model_orig models/model_orig \
+    --lora-paths models/model_lora models/model_lora \
+    --token-pools first last
 
 # this rerank code is only designed for kaggle uses
 echo "RERANK..."
