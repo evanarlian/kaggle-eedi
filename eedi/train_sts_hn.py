@@ -44,9 +44,11 @@ class Args:
     token_pool: Literal["first", "last"]
     per_device_bs: int
     lr: float
+    warmup_ratio: float
     n_epochs: int
     lora_rank: Optional[int]
     dataset_seed: int
+    iterative_hnm: bool
     run_name: str
 
 
@@ -160,7 +162,7 @@ def main(args: Args):
         per_device_train_batch_size=args.per_device_bs,
         per_device_eval_batch_size=args.per_device_bs,
         learning_rate=args.lr,
-        warmup_ratio=0.2,
+        warmup_ratio=args.warmup_ratio,
         fp16=False,  # Set to False if you get an error that your GPU can't run on FP16
         bf16=True,  # Set to True if you have a GPU that supports BF16
         dataloader_drop_last=True,
@@ -189,7 +191,7 @@ def main(args: Args):
         data_collator=data_collator,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        callbacks=[ihnm_callback],
+        callbacks=[ihnm_callback] if args.iterative_hnm else None,
     )
     ac.wait_for_everyone()
     trainer.train()
@@ -236,6 +238,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--lr", type=float, required=True, help="Peak learning rate")
     parser.add_argument(
+        "--warmup-ratio", type=float, required=True, help="Learning rate warmup ratio"
+    )
+    parser.add_argument(
         "--n-epochs", type=int, required=True, help="Number of trianing epochs"
     )
     parser.add_argument(
@@ -249,6 +254,11 @@ if __name__ == "__main__":
         type=int,
         required=True,
         help="Seed to control ONLY dataset splitting",
+    )
+    parser.add_argument(
+        "--iterative-hnm",
+        action="store_true",
+        help="Whether to use iterative version of hn mining or not",
     )
     parser.add_argument(
         "--run-name",

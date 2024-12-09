@@ -71,12 +71,13 @@ MASTERPLAN:
   * different everything
     * (done) seed
     * (done) lr
-    * optim
-    * loss func
+    * optim (nah, too complex)
+    * loss func (nah, too complex)
     * (done) lora
     * (done) grouped cv splits
     * (done) synthetic usage
-    * hn mining stuffs
+    * (done) hn mining stuffs
+    * (done) warmup ratio
   * concat embed later
   * this is ensembling, concat embedding
 * Notion note about kaggle Dataset speed vs notebook output

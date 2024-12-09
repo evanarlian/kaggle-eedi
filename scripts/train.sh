@@ -20,9 +20,11 @@ accelerate launch eedi/train_sts_hn.py \
     --token-pool=last \
     --per-device-bs=8 \
     --lr=2e-4 \
+    --warmup-ratio=0.2 \
     --n-epochs=5 \
     --lora-rank=16 \
     --dataset-seed=1 \
+    --iterative-hnm \
     --run-name=synthetic-test
 
 # If training succeeds, send success notification
