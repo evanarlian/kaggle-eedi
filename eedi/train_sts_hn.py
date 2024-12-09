@@ -72,21 +72,17 @@ def main(args: Args):
     # 2. load dataset
     # load misconception
     df_mis = pd.read_csv(args.synthetic_path / "misconception_mapping.csv")
-    orig_mis = (
-        df_mis[~df_mis["Synthetic"]]
-        .sort_values("MisconceptionId")["MisconceptionText"]
-        .tolist()
-    )
+    orig_mis = df_mis["MisconceptionName"].tolist()
     assert len(orig_mis) == 2587
     # load synthetic train
     df = pd.read_csv(args.synthetic_path / "train.csv")
     df["QuestionComplete"] = df.apply(make_complete_query, axis=1)
     # split to train (w/ miscons) and val (w/o miscons)
-    gss = GroupShuffleSplit(n_splits=1, train_size=0.7, random_state=args.dataset_seed)
+    gss = GroupShuffleSplit(n_splits=1, train_size=0.7)
     train_idx, val_idx = next(gss.split(df, groups=df["QuestionId"]))
     df_train = df.iloc[train_idx].reset_index(drop=True)
     df_val = df.iloc[val_idx]
-    df_val = df_val[~df_val["QuestionAiCreated"]].reset_index(drop=True)
+    df_val = df_val[~df_val["Synthetic"]].reset_index(drop=True)
     # cache hard negative mining, this is just for fast dev iteration
     with ac.main_process_first():
         cache = Path(f"hards_{args.model.replace('/', '_')}.json")
@@ -101,7 +97,7 @@ def main(args: Args):
                 tokenizer,
                 q_texts=df_train["QuestionComplete"].tolist(),
                 q_mis_ids=df_train["MisconceptionId"].tolist(),
-                mis_texts=df_mis["MisconceptionText"].tolist(),
+                mis_texts=df_mis["MisconceptionName"].tolist(),
                 mis_ids=df_mis["MisconceptionId"].tolist(),
                 k=100,
                 bs=args.per_device_bs,
@@ -134,7 +130,7 @@ def main(args: Args):
     train_dataset = TrainDataset(
         q_texts=df_train["QuestionComplete"].tolist(),
         q_mis_ids=df_train["MisconceptionId"].tolist(),
-        mis_texts=df_mis["MisconceptionText"].tolist(),
+        mis_texts=df_mis["MisconceptionName"].tolist(),
         mis_ids=df_mis["MisconceptionId"].tolist(),
         hards=hards_st,
         n_negatives=10,
@@ -216,7 +212,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--use-synthetic",
-        type=bool,
         action="store_true",
         help="Whether to use synthetic data or not",
     )
