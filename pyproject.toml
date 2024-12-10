@@ -24,6 +24,7 @@ dependencies = [
     "bitsandbytes==0.44.1",
     "vllm==0.6.4.post1",
     "logits-processor-zoo==0.1.0",
+    "dspy==2.5.41",
 ]
 
 [tool.setuptools]
