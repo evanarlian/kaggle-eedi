@@ -63,25 +63,14 @@ MASTERPLAN:
 * use grad accumulation for larger models
 * try deepspeed offloading (cpu) to see the memory difference. Try not to bc this is slow.
 * is there a way to avoid stateful config? (accelerate config is stateful and i prefer the explicit way)
+* retrieval
+  * retrain 4 1.5 B Qwens, different everything, breed the winner model
+  * inference can be improved even more, utilising 2x gpus, but idk i might not want to use 4 models anyway??
 * rerank
   * prompt qwen32B to just output 1,2,3..,9 This is important because the model MUST know it should output letters right away
   * Chinese borda count
   * dspy on awq vllm (i think this is fine since vllm has openai api), i think i need to rent lambda again to optimize dspy
   * soft borda count
-* retrieval
-  * retrain 4 1.5 B Qwens
-  * different everything
-    * (done) seed
-    * (done) lr
-    * optim (nah, too complex)
-    * loss func (nah, too complex)
-    * (done) lora
-    * (done) grouped cv splits
-    * (done) synthetic usage
-    * (done) hn mining stuffs
-    * (done) warmup ratio
-  * concat embed later
-  * this is ensembling, concat embedding
 * Notion note about kaggle Dataset speed vs notebook output
 * Find more creative way to do test time compute
 
