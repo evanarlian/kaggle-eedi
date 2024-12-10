@@ -46,51 +46,38 @@ Edit training script and run it.
 ./scripts/train.sh
 ```
 
-# todo
-MASTERPLAN:
-1. [DONE] paraphrase question and misconception. add new column (ai_created). push to kaggle dataset but private.
-2. [DONE] find out about the llm model that does not require trust remote code. Nvidia nvembed v2 is super bad because it need to change the sentence transformer code.
-3. finetune the model based on KDE(?) cup 1st winner code on kaggle. Ref: https://www.kaggle.com/competitions/eedi-mining-misconceptions-in-mathematics/discussion/543519
-4. after rerank, ask qwen math to select the most appropriate misconception
-5. fix notebooks and stray py files (unimportant, do it last)
-
 
 # todo
+* fix notebooks and stray py files (unimportant, do it last) 
 * learn to use vast ai, they are so much cheaper, just use the datacenter one if not sure (in later comps)
 * try saving each models (after eval) to huggingface, just for safeguard in case of overfitting
 * wandb log args only log on rank 0. Log global batch size
 * how to do eval only on rank 0 deepspeed?
-* use grad accumulation for larger models
-* try deepspeed offloading (cpu) to see the memory difference. Try not to bc this is slow.
 * is there a way to avoid stateful config? (accelerate config is stateful and i prefer the explicit way)
 * retrieval
-  * retrain 4 1.5 B Qwens, different everything, breed the winner model
-  * inference can be improved even more, utilising 2x gpus, but idk i might not want to use 4 models anyway??
+  * use 14B dude solution, must change how complete question is structured
 * rerank
-  * prompt qwen32B to just output 1,2,3..,9 This is important because the model MUST know it should output letters right away
   * Chinese borda count
+  * soft borda count using logits?
   * dspy on awq vllm (i think this is fine since vllm has openai api), i think i need to rent lambda again to optimize dspy
-  * soft borda count
-* Notion note about kaggle Dataset speed vs notebook output
-* Find more creative way to do test time compute
+  * Find more creative way to do test time compute
 
 
 # lambdalabs
-My personal flow so
+My personal flow.
 
 Make new SSH key (just once) and copy to every lambda instances to allow github access. Make sure to add SSH key to github as well.
-
-TODO copy tmux from here too, dont do it from this repo!
 ```bash
-LAMBDA_IP=...
+# just once
 ssh-keygen -t ed25519 -f ~/.ssh/lambdalabs -N ""
+
+LAMBDA_IP=...
 scp ~/.ssh/lambdalabs ubuntu@$LAMBDA_IP:~/.ssh/id_ed25519
 scp -r ~/.kaggle ubuntu@$LAMBDA_IP:~
 scp ~/.tmux.conf ubuntu@$LAMBDA_IP:~
 ```
 
-On lambda
-
+On lambda vm, use tmux now to prevent interruptions.
 ```bash
 git clone git@github.com:evanarlian/kaggle-eedi.git
 cd kaggle-eedi
@@ -99,7 +86,6 @@ cd kaggle-eedi
 export $(cat .env | xargs)
 ```
 
-on lmabda
 ```bash
 mkdir -p ~/miniconda3
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
@@ -109,7 +95,6 @@ source ~/miniconda3/bin/activate
 conda init --all
 ```
 
-on lambda again, after this point, always use tmux from the vm to prevent job being stopped on connection issues
 ```bash
 conda create -n kaggle_eedi python=3.11 -y
 conda activate kaggle_eedi
@@ -121,7 +106,6 @@ accelerate config
 ln -s ~/.cache/huggingface/accelerate/default_config.yaml .
 ```
 
-logins
 ```bash
 git config --global credential.helper store
 huggingface-cli login --token $HF_TOKEN --add-to-git-credential
