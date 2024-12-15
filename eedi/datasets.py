@@ -228,9 +228,6 @@ class EvalDataset(Dataset):
         }
 
 
-# TODO rethink about the new synthetic data, dont use the paraphrased data
-
-
 class MyCollator:
     def __init__(self, tokenizer: PreTrainedTokenizerBase):
         self.tokenizer = tokenizer

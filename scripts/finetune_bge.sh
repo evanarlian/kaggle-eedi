@@ -30,8 +30,6 @@ torchrun --nproc_per_node 1 \
     --save_steps 1000 \
     --query_instruction_for_retrieval ""
 
-# TODO add validation here (make sure the format is MISCONCEPTION ... and )
-
 python -m FlagEmbedding.baai_general_embedding.finetune.hn_mine \
     --model_name_or_path models/bge_large_en_ft_stage1 \
     --input_file data/bge_dataset/train.jsonl \
@@ -59,7 +57,3 @@ torchrun --nproc_per_node 1 \
     --logging_steps 10 \
     --save_steps 1000 \
     --query_instruction_for_retrieval "" 
-
-# TODO add validation here
-
-# TODO try grad ckpt

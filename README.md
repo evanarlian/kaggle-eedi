@@ -1,5 +1,5 @@
 # kaggle-eedi
-Eedi - Mining Misconceptions in Mathematics
+Eedi - Mining Misconceptions in Mathematics. See my kaggle [solution](https://www.kaggle.com/competitions/eedi-mining-misconceptions-in-mathematics/discussion/551659).
 
 
 # preparation
@@ -21,7 +21,7 @@ Use openai gpt-4o mini to paraphrase the questions and the miconceptions to incr
 ```bash
 python eedi/paraphrase.py --dataset-dir=data
 ```
-**Note**: this is only done once, you can download paraphrased data [here](https://www.kaggle.com/datasets/evanarlian/eedi-paraphrased). TODO make public later.
+**Note**: this is only done once, you can download paraphrased data [here](https://www.kaggle.com/datasets/evanarlian/eedi-paraphrased).
 
 ## synthetic data generation
 Use openai gpt-4o to generate synthetic data increase dataset size. Some details:
@@ -34,7 +34,7 @@ Use openai gpt-4o to generate synthetic data increase dataset size. Some details
 ```bash
 python eedi/generate_synthetic.py --dataset-dir=data 
 ```
-**Note**: this is only done once, you can download paraphrased data [here](https://www.kaggle.com/datasets/evanarlian/eedi-synthetic). TODO make public later.
+**Note**: this is only done once, you can download paraphrased data [here](https://www.kaggle.com/datasets/evanarlian/eedi-synthetic).
 
 ## finetune embedding model
 Finetune embedding model with hard negative mining. First, download paraphrased dataset.

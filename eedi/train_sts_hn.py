@@ -157,7 +157,6 @@ def main(args: Args):
     data_collator = MyCollator(tokenizer)
 
     # 7. train!
-    # TODO check hf docs
     training_args = TrainingArguments(
         # Required parameter:
         output_dir=f"models/{args.run_name}",
